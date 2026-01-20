@@ -1,0 +1,94 @@
+model User {
+  id            String     @id
+  name          String
+  email         String
+  emailVerified Boolean    @default(false)
+  image         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  // Click People - campos adicionais
+  status     UserStatus @default(PENDING)
+  isAdmin    Boolean    @default(false)
+  positionId String?
+  position   Position?  @relation(fields: [positionId], references: [id])
+
+  // Relações com áreas (um usuário pode pertencer a múltiplas áreas)
+  areas UserArea[]
+
+  // Relação opcional com prestador (se for colaborador com login)
+  provider Provider?
+
+  // Solicitações criadas pelo usuário
+  recessRequests       RecessRequest[]
+  terminationRequests  TerminationRequest[]
+  hiringRequests       HiringRequest[]
+  purchaseRequests     PurchaseRequest[]
+  remunerationRequests RemunerationRequest[]
+
+  // Aprovações realizadas pelo usuário
+  approvalSteps ApprovalStep[]
+
+  // Logs de auditoria
+  auditLogs AuditLog[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  DISABLED
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}

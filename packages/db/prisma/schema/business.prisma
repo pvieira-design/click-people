@@ -1,0 +1,387 @@
+// =============================================
+// ENTIDADES BASE - Cargos e Áreas
+// =============================================
+
+model Position {
+  id         String    @id @default(cuid())
+  name       String    @unique
+  level      Int       // 10=Analista, 50=Gerente, 70=Head, 80=Diretor, 90=Dir.RH, 95=CFO, 100=CEO
+  canApprove Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  users     User[]
+  providers Provider[]
+
+  @@map("position")
+}
+
+model Area {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        UserArea[]
+  providers    Provider[]
+  bonusRecords BonusRecord[]
+
+  @@map("area")
+}
+
+model UserArea {
+  userId String
+  areaId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  area   Area   @relation(fields: [areaId], references: [id], onDelete: Cascade)
+
+  @@id([userId, areaId])
+  @@map("user_area")
+}
+
+// =============================================
+// PRESTADORES
+// =============================================
+
+model Provider {
+  id             String         @id @default(cuid())
+  name           String
+  salary         Decimal        @db.Decimal(10, 2)
+  startDate      DateTime       @db.Date
+  ndaStatus      DocumentStatus @default(NOT_SIGNED)
+  contractStatus DocumentStatus @default(NOT_SIGNED)
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // Relações
+  areaId     String
+  area       Area     @relation(fields: [areaId], references: [id])
+  positionId String
+  position   Position @relation(fields: [positionId], references: [id])
+
+  // Relação opcional com usuário (se tiver login)
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+
+  // Solicitações relacionadas a este prestador
+  recessRequests       RecessRequest[]
+  terminationRequests  TerminationRequest[]
+  remunerationRequests RemunerationRequest[]
+
+  // Substituições em contratações
+  replacedByHirings HiringRequest[] @relation("ReplacedProvider")
+
+  @@index([areaId])
+  @@index([positionId])
+  @@map("provider")
+}
+
+enum DocumentStatus {
+  SIGNED
+  NOT_SIGNED
+}
+
+// =============================================
+// SOLICITAÇÕES - Enums comuns
+// =============================================
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum Priority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum ApprovalRole {
+  AREA_DIRECTOR
+  HR_DIRECTOR
+  CFO
+  CEO
+}
+
+// =============================================
+// MÓDULO: RECESSO / FÉRIAS
+// =============================================
+
+model RecessRequest {
+  id           String        @id @default(cuid())
+  status       RequestStatus @default(PENDING)
+  startDate    DateTime      @db.Date
+  endDate      DateTime      @db.Date
+  daysCount    Int           // Calculado: endDate - startDate + 1
+  reason       String?       @db.Text
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Snapshot dos dados do prestador no momento da criação
+  providerArea     String
+  providerPosition String
+
+  // Relações
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id])
+  creatorId  String
+  creator    User     @relation(fields: [creatorId], references: [id])
+
+  // Etapas de aprovação
+  approvalSteps ApprovalStep[]
+
+  @@index([providerId])
+  @@index([creatorId])
+  @@index([status])
+  @@map("recess_request")
+}
+
+// =============================================
+// MÓDULO: DESLIGAMENTO
+// =============================================
+
+model TerminationRequest {
+  id        String        @id @default(cuid())
+  status    RequestStatus @default(PENDING)
+  reason    String        @db.Text // Obrigatório, mínimo 10 caracteres
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  // Snapshot dos dados do prestador no momento da criação
+  providerArea     String
+  providerPosition String
+
+  // Relações
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id])
+  creatorId  String
+  creator    User     @relation(fields: [creatorId], references: [id])
+
+  // Etapas de aprovação
+  approvalSteps ApprovalStep[]
+
+  @@index([providerId])
+  @@index([creatorId])
+  @@index([status])
+  @@map("termination_request")
+}
+
+// =============================================
+// MÓDULO: CONTRATAÇÃO
+// =============================================
+
+model HiringRequest {
+  id                String        @id @default(cuid())
+  status            RequestStatus @default(PENDING)
+  hiringType        HiringType
+  proposedSalary    Decimal       @db.Decimal(10, 2)
+  expectedStartDate DateTime      @db.Date
+  priority          Priority
+  reason            String?       @db.Text
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // Status pós-aprovação
+  hiringStatus     HiringStatus @default(WAITING)
+  hiredName        String?      // Nome preenchido quando contratado
+  actualStartDate  DateTime?    @db.Date // Data real de início
+
+  // Relações
+  areaId     String
+  area       String // Nome da área (snapshot)
+  positionId String
+  position   String // Nome do cargo (snapshot)
+  creatorId  String
+  creator    User   @relation(fields: [creatorId], references: [id])
+
+  // Substituição (opcional)
+  replacedProviderId String?
+  replacedProvider   Provider? @relation("ReplacedProvider", fields: [replacedProviderId], references: [id])
+
+  // Etapas de aprovação
+  approvalSteps ApprovalStep[]
+
+  @@index([creatorId])
+  @@index([status])
+  @@index([hiringStatus])
+  @@map("hiring_request")
+}
+
+enum HiringType {
+  INCREASE    // Aumento de Quadro
+  REPLACEMENT // Substituição
+}
+
+enum HiringStatus {
+  WAITING     // Aguardando
+  IN_PROGRESS // Em Andamento
+  HIRED       // Contratado
+}
+
+// =============================================
+// MÓDULO: SOLICITAÇÃO DE COMPRA
+// =============================================
+
+model PurchaseRequest {
+  id          String        @id @default(cuid())
+  status      RequestStatus @default(PENDING)
+  description String        // Nome da Despesa/Serviço
+  value       Decimal       @db.Decimal(10, 2)
+  paymentDate DateTime      @db.Date
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Snapshot dos dados do solicitante
+  requesterArea     String
+  requesterPosition String
+
+  // Relações
+  creatorId String
+  creator   User   @relation(fields: [creatorId], references: [id])
+
+  // Etapas de aprovação
+  approvalSteps ApprovalStep[]
+
+  @@index([creatorId])
+  @@index([status])
+  @@map("purchase_request")
+}
+
+// =============================================
+// MÓDULO: MUDANÇA DE REMUNERAÇÃO
+// =============================================
+
+model RemunerationRequest {
+  id            String        @id @default(cuid())
+  status        RequestStatus @default(PENDING)
+  currentSalary Decimal       @db.Decimal(10, 2) // Snapshot do salário atual
+  newSalary     Decimal       @db.Decimal(10, 2)
+  effectiveDate DateTime      @db.Date
+  priority      Priority
+  reason        String        @db.Text // Obrigatório
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Snapshot dos dados do prestador no momento da criação
+  providerArea     String
+  providerPosition String
+
+  // Relações
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id])
+  creatorId  String
+  creator    User     @relation(fields: [creatorId], references: [id])
+
+  // Etapas de aprovação
+  approvalSteps ApprovalStep[]
+
+  @@index([providerId])
+  @@index([creatorId])
+  @@index([status])
+  @@map("remuneration_request")
+}
+
+// =============================================
+// SISTEMA DE APROVAÇÃO
+// =============================================
+
+model ApprovalStep {
+  id           String        @id @default(cuid())
+  stepNumber   Int           // 1, 2, 3, 4
+  role         ApprovalRole  // Quem deve aprovar esta etapa
+  status       RequestStatus @default(PENDING)
+  comment      String?       @db.Text // Obrigatório em rejeições
+  approvedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Quem aprovou/rejeitou
+  approverId String?
+  approver   User?   @relation(fields: [approverId], references: [id])
+
+  // Relações com cada tipo de solicitação (apenas uma será preenchida)
+  recessRequestId       String?
+  recessRequest         RecessRequest?       @relation(fields: [recessRequestId], references: [id], onDelete: Cascade)
+  terminationRequestId  String?
+  terminationRequest    TerminationRequest?  @relation(fields: [terminationRequestId], references: [id], onDelete: Cascade)
+  hiringRequestId       String?
+  hiringRequest         HiringRequest?       @relation(fields: [hiringRequestId], references: [id], onDelete: Cascade)
+  purchaseRequestId     String?
+  purchaseRequest       PurchaseRequest?     @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  remunerationRequestId String?
+  remunerationRequest   RemunerationRequest? @relation(fields: [remunerationRequestId], references: [id], onDelete: Cascade)
+
+  @@index([approverId])
+  @@index([recessRequestId])
+  @@index([terminationRequestId])
+  @@index([hiringRequestId])
+  @@index([purchaseRequestId])
+  @@index([remunerationRequestId])
+  @@map("approval_step")
+}
+
+// =============================================
+// MÓDULO: FOLHA - BÔNUS
+// =============================================
+
+model BonusRecord {
+  id        String    @id @default(cuid())
+  year      Int
+  month     Int       // 1-12
+  tier      BonusTier
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  areaId String
+  area   Area   @relation(fields: [areaId], references: [id])
+
+  @@unique([areaId, year, month])
+  @@index([year, month])
+  @@map("bonus_record")
+}
+
+enum BonusTier {
+  NONE   // 0%
+  BRONZE // 10%
+  SILVER // 15%
+  GOLD   // 20%
+}
+
+// =============================================
+// AUDITORIA
+// =============================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String   // CREATE, UPDATE, DELETE, APPROVE, REJECT, LOGIN, LOGOUT, VIEW
+  entityType String   // User, Provider, RecessRequest, etc.
+  entityId   String?
+  details    Json?    // Dados adicionais (before/after para edições)
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
+// =============================================
+// CONFIGURAÇÕES DO SISTEMA
+// =============================================
+
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_config")
+}

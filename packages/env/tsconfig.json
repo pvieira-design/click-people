@@ -1,0 +1,3 @@
+{
+  "extends": "@click-people/config/tsconfig.base.json"
+}
