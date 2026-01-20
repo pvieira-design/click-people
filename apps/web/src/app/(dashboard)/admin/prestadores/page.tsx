@@ -61,6 +61,7 @@ type Provider = {
   name: string;
   salary: number;
   startDate: string | Date;
+  seniority?: string | null;
   ndaStatus: "SIGNED" | "NOT_SIGNED";
   contractStatus: "SIGNED" | "NOT_SIGNED";
   isActive: boolean;
@@ -70,10 +71,13 @@ type Provider = {
   createdAt: string | Date;
 };
 
+type Seniority = "JUNIOR" | "MID" | "SENIOR" | "LEAD" | "PRINCIPAL" | "NA";
+
 type FormData = {
   name: string;
   salary: string;
   startDate: string;
+  seniority: Seniority;
   ndaStatus: "SIGNED" | "NOT_SIGNED";
   contractStatus: "SIGNED" | "NOT_SIGNED";
   areaId: string;
@@ -84,10 +88,20 @@ const initialFormData: FormData = {
   name: "",
   salary: "",
   startDate: new Date().toISOString().split("T")[0],
+  seniority: "NA",
   ndaStatus: "NOT_SIGNED",
   contractStatus: "NOT_SIGNED",
   areaId: "",
   positionId: "",
+};
+
+const seniorityLabels: Record<Seniority, string> = {
+  JUNIOR: "Junior",
+  MID: "Pleno",
+  SENIOR: "Senior",
+  LEAD: "Lead",
+  PRINCIPAL: "Principal",
+  NA: "N/A",
 };
 
 export default function AdminPrestadoresPage() {
@@ -194,6 +208,7 @@ export default function AdminPrestadoresPage() {
       name: formData.name,
       salary: parseFloat(formData.salary),
       startDate: formData.startDate,
+      seniority: formData.seniority,
       ndaStatus: formData.ndaStatus,
       contractStatus: formData.contractStatus,
       areaId: formData.areaId,
@@ -209,6 +224,7 @@ export default function AdminPrestadoresPage() {
       name: formData.name,
       salary: parseFloat(formData.salary),
       startDate: formData.startDate,
+      seniority: formData.seniority,
       ndaStatus: formData.ndaStatus,
       contractStatus: formData.contractStatus,
       areaId: formData.areaId,
@@ -227,6 +243,7 @@ export default function AdminPrestadoresPage() {
       name: provider.name,
       salary: provider.salary.toString(),
       startDate: new Date(provider.startDate).toISOString().split("T")[0],
+      seniority: (provider.seniority as Seniority) || "NA",
       ndaStatus: provider.ndaStatus,
       contractStatus: provider.contractStatus,
       areaId: provider.area.id,
@@ -245,6 +262,15 @@ export default function AdminPrestadoresPage() {
       style: "currency",
       currency: "BRL",
     }).format(value);
+  };
+
+  // Helpers para obter nomes por ID
+  const getAreaName = (areaId: string) => {
+    return areasQuery.data?.find((a) => a.id === areaId)?.name || "Selecione";
+  };
+
+  const getPositionName = (positionId: string) => {
+    return positionsQuery.data?.find((p) => p.id === positionId)?.name || "Selecione";
   };
 
   return (
@@ -309,6 +335,7 @@ export default function AdminPrestadoresPage() {
                     <TableHead>Nome</TableHead>
                     <TableHead>Area</TableHead>
                     <TableHead>Cargo</TableHead>
+                    <TableHead>Nivel</TableHead>
                     <TableHead>Salario</TableHead>
                     <TableHead>Inicio</TableHead>
                     <TableHead>NDA</TableHead>
@@ -323,6 +350,11 @@ export default function AdminPrestadoresPage() {
                       <TableCell className="font-medium">{provider.name}</TableCell>
                       <TableCell>{provider.area.name}</TableCell>
                       <TableCell>{provider.position.name}</TableCell>
+                      <TableCell>
+                        {provider.seniority && provider.seniority !== "NA"
+                          ? seniorityLabels[provider.seniority as Seniority]
+                          : "-"}
+                      </TableCell>
                       <TableCell>{formatCurrency(provider.salary)}</TableCell>
                       <TableCell>
                         {format(new Date(provider.startDate), "dd/MM/yyyy", { locale: ptBR })}
@@ -350,7 +382,7 @@ export default function AdminPrestadoresPage() {
                             <MoreHorizontal className="h-4 w-4" />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openEditDialog(provider)}>
+                            <DropdownMenuItem onClick={() => openEditDialog(provider as Provider)}>
                               <Edit className="mr-2 h-4 w-4" />
                               Editar
                             </DropdownMenuItem>
@@ -371,7 +403,7 @@ export default function AdminPrestadoresPage() {
                             )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              onClick={() => openDeleteDialog(provider)}
+                              onClick={() => openDeleteDialog(provider as Provider)}
                               className="text-destructive focus:text-destructive"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -438,7 +470,9 @@ export default function AdminPrestadoresPage() {
                   onValueChange={(value) => value && setFormData({ ...formData, areaId: value })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
+                    <SelectValue placeholder="Selecione">
+                      {formData.areaId ? getAreaName(formData.areaId) : "Selecione"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {areasQuery.data?.map((area) => (
@@ -456,7 +490,9 @@ export default function AdminPrestadoresPage() {
                   onValueChange={(value) => value && setFormData({ ...formData, positionId: value })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
+                    <SelectValue placeholder="Selecione">
+                      {formData.positionId ? getPositionName(formData.positionId) : "Selecione"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {positionsQuery.data?.map((position) => (
@@ -468,7 +504,30 @@ export default function AdminPrestadoresPage() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="seniority">Nivel</Label>
+                <Select
+                  value={formData.seniority}
+                  onValueChange={(value) =>
+                    value && setFormData({ ...formData, seniority: value as Seniority })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue>
+                      {seniorityLabels[formData.seniority]}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NA">N/A</SelectItem>
+                    <SelectItem value="JUNIOR">Junior</SelectItem>
+                    <SelectItem value="MID">Pleno</SelectItem>
+                    <SelectItem value="SENIOR">Senior</SelectItem>
+                    <SelectItem value="LEAD">Lead</SelectItem>
+                    <SelectItem value="PRINCIPAL">Principal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="ndaStatus">NDA</Label>
                 <Select
@@ -566,7 +625,9 @@ export default function AdminPrestadoresPage() {
                   onValueChange={(value) => value && setFormData({ ...formData, areaId: value })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
+                    <SelectValue placeholder="Selecione">
+                      {formData.areaId ? getAreaName(formData.areaId) : "Selecione"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {areasQuery.data?.map((area) => (
@@ -584,7 +645,9 @@ export default function AdminPrestadoresPage() {
                   onValueChange={(value) => value && setFormData({ ...formData, positionId: value })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
+                    <SelectValue placeholder="Selecione">
+                      {formData.positionId ? getPositionName(formData.positionId) : "Selecione"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {positionsQuery.data?.map((position) => (
@@ -596,7 +659,30 @@ export default function AdminPrestadoresPage() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-seniority">Nivel</Label>
+                <Select
+                  value={formData.seniority}
+                  onValueChange={(value) =>
+                    value && setFormData({ ...formData, seniority: value as Seniority })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue>
+                      {seniorityLabels[formData.seniority]}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NA">N/A</SelectItem>
+                    <SelectItem value="JUNIOR">Junior</SelectItem>
+                    <SelectItem value="MID">Pleno</SelectItem>
+                    <SelectItem value="SENIOR">Senior</SelectItem>
+                    <SelectItem value="LEAD">Lead</SelectItem>
+                    <SelectItem value="PRINCIPAL">Principal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-ndaStatus">NDA</Label>
                 <Select

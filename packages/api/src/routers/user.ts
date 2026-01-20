@@ -197,4 +197,86 @@ export const userRouter = router({
 
       return { success: true };
     }),
+
+  // Obter contagem de solicitacoes pendentes que o usuario pode aprovar
+  getPendingCounts: protectedProcedure.query(async ({ ctx }) => {
+    const user = await prisma.user.findUnique({
+      where: { id: ctx.session.user.id },
+      include: {
+        position: true,
+        areas: true,
+      },
+    });
+
+    if (!user || !user.position) {
+      return { recess: 0, termination: 0, hiring: 0, purchase: 0, remuneration: 0, total: 0 };
+    }
+
+    const userLevel = user.position.level;
+    const userAreaIds = user.areas.map((a) => a.areaId);
+    const canApproveFlag = user.position.canApprove || user.isAdmin;
+
+    // Se nao pode aprovar, retorna 0
+    if (!canApproveFlag) {
+      return { recess: 0, termination: 0, hiring: 0, purchase: 0, remuneration: 0, total: 0 };
+    }
+
+    // Niveis minimos por role
+    const ROLE_MIN_LEVELS = {
+      AREA_DIRECTOR: 80,
+      HR_DIRECTOR: 90,
+      CFO: 95,
+      CEO: 100,
+    } as const;
+
+    // Buscar todas as etapas pendentes
+    const pendingSteps = await prisma.approvalStep.findMany({
+      where: { status: "PENDING" },
+      include: {
+        recessRequest: { select: { id: true, providerArea: true, status: true } },
+        terminationRequest: { select: { id: true, providerArea: true, status: true } },
+        hiringRequest: { select: { id: true, areaId: true, status: true } },
+        purchaseRequest: { select: { id: true, requesterArea: true, status: true } },
+        remunerationRequest: { select: { id: true, providerArea: true, status: true } },
+      },
+    });
+
+    // Filtrar apenas as que o usuario pode aprovar
+    const counts = { recess: 0, termination: 0, hiring: 0, purchase: 0, remuneration: 0 };
+
+    for (const step of pendingSteps) {
+      const minLevel = ROLE_MIN_LEVELS[step.role as keyof typeof ROLE_MIN_LEVELS];
+      if (!minLevel || userLevel < minLevel) continue;
+
+      // Verificar area para AREA_DIRECTOR
+      if (step.role === "AREA_DIRECTOR") {
+        let requestAreaId: string | undefined;
+        if (step.recessRequest) requestAreaId = step.recessRequest.providerArea;
+        else if (step.terminationRequest) requestAreaId = step.terminationRequest.providerArea;
+        else if (step.hiringRequest) requestAreaId = step.hiringRequest.areaId;
+        else if (step.purchaseRequest) requestAreaId = step.purchaseRequest.requesterArea;
+        else if (step.remunerationRequest) requestAreaId = step.remunerationRequest.providerArea;
+
+        if (requestAreaId && !userAreaIds.includes(requestAreaId)) continue;
+      }
+
+      // Contar por tipo
+      if (step.recessRequest && step.recessRequest.status === "PENDING") {
+        counts.recess++;
+      } else if (step.terminationRequest && step.terminationRequest.status === "PENDING") {
+        counts.termination++;
+      } else if (step.hiringRequest && step.hiringRequest.status === "PENDING") {
+        counts.hiring++;
+      } else if (step.purchaseRequest && step.purchaseRequest.status === "PENDING") {
+        counts.purchase++;
+      } else if (step.remunerationRequest && step.remunerationRequest.status === "PENDING") {
+        counts.remuneration++;
+      }
+    }
+
+    return {
+      ...counts,
+      total: counts.recess + counts.termination + counts.hiring + counts.purchase + counts.remuneration,
+    };
+  }),
 });

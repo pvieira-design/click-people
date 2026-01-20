@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import {
   CalendarDays,
   ChevronLeft,
@@ -22,7 +23,9 @@ import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
+import { trpc } from "@/utils/trpc";
 
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 
 interface SidebarProps {
@@ -42,26 +45,31 @@ const requestNavItems = [
     title: "Recesso/Ferias",
     href: "/solicitacoes/recesso",
     icon: CalendarDays,
+    countKey: "recess" as const,
   },
   {
     title: "Desligamento",
     href: "/solicitacoes/desligamento",
     icon: UserMinus,
+    countKey: "termination" as const,
   },
   {
     title: "Contratacao",
     href: "/solicitacoes/contratacao",
     icon: UserPlus,
+    countKey: "hiring" as const,
   },
   {
     title: "Compra",
     href: "/solicitacoes/compra",
     icon: CreditCard,
+    countKey: "purchase" as const,
   },
   {
     title: "Remuneracao",
     href: "/solicitacoes/remuneracao",
     icon: DollarSign,
+    countKey: "remuneration" as const,
   },
 ];
 
@@ -106,17 +114,40 @@ const adminNavItems = [
   },
 ];
 
+type PendingCounts = {
+  recess: number;
+  termination: number;
+  hiring: number;
+  purchase: number;
+  remuneration: number;
+  total: number;
+};
+
 export default function Sidebar({ isAdmin = false }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+
+  // Buscar contagens de solicitacoes pendentes
+  const pendingCountsQuery = useQuery(trpc.user.getPendingCounts.queryOptions());
+  const pendingCounts = pendingCountsQuery.data as PendingCounts | undefined;
 
   const handleSignOut = async () => {
     await authClient.signOut();
     router.push("/login");
   };
 
-  const NavLink = ({ href, icon: Icon, title }: { href: string; icon: any; title: string }) => {
+  const NavLink = ({
+    href,
+    icon: Icon,
+    title,
+    badgeCount,
+  }: {
+    href: string;
+    icon: any;
+    title: string;
+    badgeCount?: number;
+  }) => {
     // Para /folha e /folha/bonus, só ativa se for exatamente igual
     // Para outras rotas, usa startsWith para subpáginas
     const isExactMatch = pathname === href;
@@ -134,12 +165,42 @@ export default function Sidebar({ isAdmin = false }: SidebarProps) {
         )}
       >
         <Icon className="h-4 w-4 shrink-0" />
-        {!collapsed && <span>{title}</span>}
+        {!collapsed && (
+          <>
+            <span className="flex-1">{title}</span>
+            {badgeCount !== undefined && badgeCount > 0 && (
+              <Badge
+                variant="secondary"
+                className={cn(
+                  "ml-auto h-5 min-w-5 justify-center px-1.5 text-xs font-medium",
+                  isActive
+                    ? "bg-primary-foreground/20 text-primary-foreground"
+                    : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                )}
+              >
+                {badgeCount > 99 ? "99+" : badgeCount}
+              </Badge>
+            )}
+          </>
+        )}
+        {collapsed && badgeCount !== undefined && badgeCount > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[10px] font-medium text-white">
+            {badgeCount > 9 ? "9+" : badgeCount}
+          </span>
+        )}
       </Link>
     );
   };
 
-  const NavSection = ({ title, items }: { title: string; items: typeof mainNavItems }) => (
+  const NavSection = ({
+    title,
+    items,
+    showBadges = false,
+  }: {
+    title: string;
+    items: typeof mainNavItems | typeof requestNavItems;
+    showBadges?: boolean;
+  }) => (
     <div className="space-y-1">
       {!collapsed && (
         <h3 className="px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -147,9 +208,22 @@ export default function Sidebar({ isAdmin = false }: SidebarProps) {
         </h3>
       )}
       <nav className="space-y-1">
-        {items.map((item) => (
-          <NavLink key={item.href} {...item} />
-        ))}
+        {items.map((item) => {
+          const badgeCount =
+            showBadges && "countKey" in item && pendingCounts
+              ? pendingCounts[item.countKey as keyof PendingCounts]
+              : undefined;
+          return (
+            <div key={item.href} className="relative">
+              <NavLink
+                href={item.href}
+                icon={item.icon}
+                title={item.title}
+                badgeCount={typeof badgeCount === "number" ? badgeCount : undefined}
+              />
+            </div>
+          );
+        })}
       </nav>
     </div>
   );
@@ -186,7 +260,7 @@ export default function Sidebar({ isAdmin = false }: SidebarProps) {
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         <NavSection title="Principal" items={mainNavItems} />
-        <NavSection title="Solicitacoes" items={requestNavItems} />
+        <NavSection title="Solicitacoes" items={requestNavItems} showBadges />
         <NavSection title="Folha de Pagamento" items={payrollNavItems} />
         {isAdmin && <NavSection title="Administracao" items={adminNavItems} />}
       </div>

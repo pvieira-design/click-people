@@ -48,6 +48,7 @@ model Provider {
   name           String
   salary         Decimal        @db.Decimal(10, 2)
   startDate      DateTime       @db.Date
+  seniority      Seniority      @default(NA)
   ndaStatus      DocumentStatus @default(NOT_SIGNED)
   contractStatus DocumentStatus @default(NOT_SIGNED)
   isActive       Boolean        @default(true)
@@ -80,6 +81,15 @@ model Provider {
 enum DocumentStatus {
   SIGNED
   NOT_SIGNED
+}
+
+enum Seniority {
+  JUNIOR
+  MID      // Pleno
+  SENIOR
+  LEAD
+  PRINCIPAL
+  NA       // Não aplicável (para cargos como Diretor, CEO, etc.)
 }
 
 // =============================================

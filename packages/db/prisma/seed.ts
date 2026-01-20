@@ -28,7 +28,48 @@ async function main() {
   console.log("📋 Criando cargos...");
 
   const positions = [
+    // Tecnologia
+    { name: "Dev Frontend", level: 10, canApprove: false },
+    { name: "Dev Backend", level: 10, canApprove: false },
+    { name: "Dev Fullstack", level: 10, canApprove: false },
+    { name: "Dev Mobile", level: 10, canApprove: false },
+    { name: "QA Engineer", level: 10, canApprove: false },
+    { name: "DevOps Engineer", level: 10, canApprove: false },
+    { name: "Data Engineer", level: 10, canApprove: false },
+    { name: "Data Analyst", level: 10, canApprove: false },
+    { name: "Product Owner", level: 30, canApprove: false },
+    { name: "Product Manager", level: 40, canApprove: false },
+    { name: "Tech Lead", level: 50, canApprove: false },
+    { name: "Designer UI/UX", level: 10, canApprove: false },
+    { name: "Designer", level: 10, canApprove: false },
+
+    // Atendimento / Comercial
+    { name: "Atendente", level: 10, canApprove: false },
+    { name: "Consultor de Vendas", level: 10, canApprove: false },
+    { name: "Customer Success", level: 10, canApprove: false },
+    { name: "Supervisor", level: 30, canApprove: false },
+
+    // Marketing
+    { name: "Content Manager", level: 10, canApprove: false },
+    { name: "Social Media", level: 10, canApprove: false },
+    { name: "Growth Analyst", level: 10, canApprove: false },
+    { name: "Copywriter", level: 10, canApprove: false },
+
+    // Operações / Admin
+    { name: "Analista Administrativo", level: 10, canApprove: false },
+    { name: "Analista Financeiro", level: 10, canApprove: false },
+    { name: "Analista de RH", level: 10, canApprove: false },
+    { name: "Assistente", level: 5, canApprove: false },
+
+    // Médico / Saúde
+    { name: "Médico", level: 10, canApprove: false },
+    { name: "Coordenador Médico", level: 40, canApprove: false },
+
+    // Cargos genéricos (mantidos para compatibilidade)
     { name: "Analista", level: 10, canApprove: false },
+    { name: "Coordenador", level: 40, canApprove: false },
+
+    // Gestão
     { name: "Gerente", level: 50, canApprove: false },
     { name: "Head", level: 70, canApprove: false },
     { name: "Diretor", level: 80, canApprove: true },

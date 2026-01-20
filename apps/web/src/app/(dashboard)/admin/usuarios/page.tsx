@@ -12,11 +12,32 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
+type UserSelections = {
+  areas: string[];
+  position: string;
+  isAdmin: boolean;
+};
+
 export default function AdminUsuariosPage() {
   const queryClient = useQueryClient();
-  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
-  const [selectedPosition, setSelectedPosition] = useState<string>("");
-  const [makeAdmin, setMakeAdmin] = useState(false);
+  // Track selections per user ID to avoid shared state bug
+  const [userSelections, setUserSelections] = useState<Record<string, UserSelections>>({});
+
+  // Helper to get selections for a specific user
+  const getSelectionsForUser = (userId: string): UserSelections => {
+    return userSelections[userId] || { areas: [], position: "", isAdmin: false };
+  };
+
+  // Helper to update selections for a specific user
+  const updateUserSelections = (userId: string, updates: Partial<UserSelections>) => {
+    setUserSelections((prev) => ({
+      ...prev,
+      [userId]: {
+        ...getSelectionsForUser(userId),
+        ...updates,
+      },
+    }));
+  };
 
   // Queries
   const usersQuery = useQuery(trpc.user.list.queryOptions());
@@ -27,13 +48,15 @@ export default function AdminUsuariosPage() {
   // Mutations
   const approveMutation = useMutation(
     trpc.user.approve.mutationOptions({
-      onSuccess: () => {
+      onSuccess: (_, variables) => {
         toast.success("Usuario aprovado com sucesso!");
         queryClient.invalidateQueries({ queryKey: trpc.user.list.queryKey() });
         queryClient.invalidateQueries({ queryKey: trpc.user.listPending.queryKey() });
-        setSelectedAreas([]);
-        setSelectedPosition("");
-        setMakeAdmin(false);
+        // Clear selections for the approved user
+        setUserSelections((prev) => {
+          const { [variables.userId]: _, ...rest } = prev;
+          return rest;
+        });
       },
       onError: (error) => {
         toast.error(error.message);
@@ -55,11 +78,12 @@ export default function AdminUsuariosPage() {
   );
 
   const handleApprove = (userId: string) => {
+    const selections = getSelectionsForUser(userId);
     approveMutation.mutate({
       userId,
-      positionId: selectedPosition || undefined,
-      areaIds: selectedAreas.length > 0 ? selectedAreas : undefined,
-      isAdmin: makeAdmin,
+      positionId: selections.position || undefined,
+      areaIds: selections.areas.length > 0 ? selections.areas : undefined,
+      isAdmin: selections.isAdmin,
     });
   };
 
@@ -149,24 +173,31 @@ export default function AdminUsuariosPage() {
                     <div className="mt-4 space-y-2">
                       <Label className="text-sm font-medium">Areas:</Label>
                       <div className="flex flex-wrap gap-2">
-                        {areasQuery.data?.map((area) => (
-                          <label
-                            key={area.id}
-                            className="flex items-center gap-2 rounded-md border px-2 py-1 cursor-pointer hover:bg-muted"
-                          >
-                            <Checkbox
-                              checked={selectedAreas.includes(area.id)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedAreas([...selectedAreas, area.id]);
-                                } else {
-                                  setSelectedAreas(selectedAreas.filter((id) => id !== area.id));
-                                }
-                              }}
-                            />
-                            <span className="text-sm">{area.name}</span>
-                          </label>
-                        ))}
+                        {areasQuery.data?.map((area) => {
+                          const selections = getSelectionsForUser(user.id);
+                          return (
+                            <label
+                              key={area.id}
+                              className="flex items-center gap-2 rounded-md border px-2 py-1 cursor-pointer hover:bg-muted"
+                            >
+                              <Checkbox
+                                checked={selections.areas.includes(area.id)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    updateUserSelections(user.id, {
+                                      areas: [...selections.areas, area.id],
+                                    });
+                                  } else {
+                                    updateUserSelections(user.id, {
+                                      areas: selections.areas.filter((id) => id !== area.id),
+                                    });
+                                  }
+                                }}
+                              />
+                              <span className="text-sm">{area.name}</span>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -174,8 +205,8 @@ export default function AdminUsuariosPage() {
                     <div className="mt-2 space-y-2">
                       <Label className="text-sm font-medium">Cargo:</Label>
                       <select
-                        value={selectedPosition}
-                        onChange={(e) => setSelectedPosition(e.target.value)}
+                        value={getSelectionsForUser(user.id).position}
+                        onChange={(e) => updateUserSelections(user.id, { position: e.target.value })}
                         className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                       >
                         <option value="">Selecione um cargo</option>
@@ -191,8 +222,10 @@ export default function AdminUsuariosPage() {
                     <div className="mt-2">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <Checkbox
-                          checked={makeAdmin}
-                          onCheckedChange={(checked) => setMakeAdmin(!!checked)}
+                          checked={getSelectionsForUser(user.id).isAdmin}
+                          onCheckedChange={(checked) =>
+                            updateUserSelections(user.id, { isAdmin: !!checked })
+                          }
                         />
                         <span className="text-sm font-medium">Tornar Administrador</span>
                       </label>
