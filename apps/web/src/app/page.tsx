@@ -1,47 +1,38 @@
-"use client";
-import { useQuery } from "@tanstack/react-query";
+import { auth } from "@click-people/auth";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 
-import { trpc } from "@/utils/trpc";
+import prisma from "@click-people/db";
 
-const TITLE_TEXT = `
- ██████╗ ███████╗████████╗████████╗███████╗██████╗
- ██╔══██╗██╔════╝╚══██╔══╝╚══██╔══╝██╔════╝██╔══██╗
- ██████╔╝█████╗     ██║      ██║   █████╗  ██████╔╝
- ██╔══██╗██╔══╝     ██║      ██║   ██╔══╝  ██╔══██╗
- ██████╔╝███████╗   ██║      ██║   ███████╗██║  ██║
- ╚═════╝ ╚══════╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝
+export default async function HomePage() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
 
- ████████╗    ███████╗████████╗ █████╗  ██████╗██╗  ██╗
- ╚══██╔══╝    ██╔════╝╚══██╔══╝██╔══██╗██╔════╝██║ ██╔╝
-    ██║       ███████╗   ██║   ███████║██║     █████╔╝
-    ██║       ╚════██║   ██║   ██╔══██║██║     ██╔═██╗
-    ██║       ███████║   ██║   ██║  ██║╚██████╗██║  ██╗
-    ╚═╝       ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
- `;
+  // Se nao esta logado, redireciona para login
+  if (!session?.user) {
+    redirect("/login");
+  }
 
-export default function Home() {
-  const healthCheck = useQuery(trpc.healthCheck.queryOptions());
+  // Busca o status do usuario no banco
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { status: true },
+  });
 
-  return (
-    <div className="container mx-auto max-w-3xl px-4 py-2">
-      <pre className="overflow-x-auto font-mono text-sm">{TITLE_TEXT}</pre>
-      <div className="grid gap-6">
-        <section className="rounded-lg border p-4">
-          <h2 className="mb-2 font-medium">API Status</h2>
-          <div className="flex items-center gap-2">
-            <div
-              className={`h-2 w-2 rounded-full ${healthCheck.data ? "bg-green-500" : "bg-red-500"}`}
-            />
-            <span className="text-sm text-muted-foreground">
-              {healthCheck.isLoading
-                ? "Checking..."
-                : healthCheck.data
-                  ? "Connected"
-                  : "Disconnected"}
-            </span>
-          </div>
-        </section>
-      </div>
-    </div>
-  );
+  // Redireciona baseado no status
+  if (!user || user.status === "PENDING") {
+    redirect("/pending");
+  }
+
+  if (user.status === "REJECTED") {
+    redirect("/rejected");
+  }
+
+  if (user.status === "DISABLED") {
+    redirect("/disabled");
+  }
+
+  // Usuario ativo - redireciona para dashboard
+  redirect("/dashboard");
 }
