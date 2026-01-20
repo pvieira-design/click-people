@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3001",
-    "build": "next build",
-    "start": "next start"
+    "build": "prisma generate --schema=../../packages/db/prisma/schema && next build",
+    "start": "next start",
+    "postinstall": "prisma generate --schema=../../packages/db/prisma/schema"
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",
@@ -43,6 +44,7 @@
     "@types/node": "^20",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "prisma": "^7.2.0",
     "tailwindcss": "^4.1.10",
     "typescript": "^5"
   }
