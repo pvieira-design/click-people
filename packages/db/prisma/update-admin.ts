@@ -5,8 +5,10 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load environment variables from apps/web/.env
-config({ path: resolve(__dirname, "../../../apps/web/.env") });
+// Load environment variables from apps/web/.env (only if DATABASE_URL not already set)
+if (!process.env.DATABASE_URL) {
+  config({ path: resolve(__dirname, "../../../apps/web/.env") });
+}
 
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "./generated/client";
@@ -15,6 +17,8 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error("DATABASE_URL not found in environment variables");
 }
+
+console.log(`Conectando ao banco: ${databaseUrl.split("@")[1]?.split("/")[0] || "local"}...`);
 
 const adapter = new PrismaPg({ connectionString: databaseUrl });
 const prisma = new PrismaClient({ adapter });

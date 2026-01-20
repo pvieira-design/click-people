@@ -7,9 +7,20 @@
 - **Banco:** PostgreSQL com Prisma ORM
 - **API:** tRPC v11
 - **Auth:** Better Auth
-- **UI:** Tailwind CSS + shadcn/ui (Radix)
+- **UI:** Tailwind CSS + Base UI (React)
 - **Forms:** TanStack Form
 - **Monorepo:** Workspaces npm
+
+## Ambientes
+
+| Ambiente | URL | Banco |
+|----------|-----|-------|
+| Local | http://localhost:3001 | PostgreSQL local |
+| Producao | https://click-people-web.vercel.app | Neon PostgreSQL |
+
+- **Hospedagem:** Vercel (deploy automatico via GitHub)
+- **Banco Producao:** Neon (sa-east-1)
+- **Repositorio:** github.com/pvieira-design/click-people
 
 ## Estrutura do Projeto
 
@@ -37,13 +48,33 @@ clickpeople/
 
 ## Comandos
 
+### Desenvolvimento Local
+
 ```bash
 npm install          # Instalar dependencias
 npm run dev          # Iniciar desenvolvimento (porta 3001)
 npm run build        # Build de producao
-npm run db:push      # Aplicar schema ao banco
-npm run db:seed      # Popular banco com dados iniciais
-npm run db:studio    # Abrir Prisma Studio
+npm run db:push      # Aplicar schema ao banco local
+npm run db:seed      # Popular banco local com dados iniciais
+npm run db:studio    # Abrir Prisma Studio (banco local)
+```
+
+### Producao (Neon)
+
+```bash
+./scripts/prod-db.sh push       # Aplicar schema no Neon
+./scripts/prod-db.sh seed       # Rodar seed no Neon
+./scripts/prod-db.sh providers  # Importar prestadores no Neon
+./scripts/prod-db.sh studio     # Prisma Studio (Neon)
+./scripts/prod-db.sh admin X    # Ativar usuario X como admin
+./scripts/prod-db.sh list       # Listar usuarios
+```
+
+### Deploy
+
+```bash
+git add . && git commit -m "msg"  # Commit das mudancas
+git push origin main              # Push = deploy automatico no Vercel
 ```
 
 ## Variaveis de Ambiente
@@ -157,3 +188,27 @@ Ver `docs/REGRAS_NEGOCIO.md` para documentacao completa das regras de negocio.
 - `packages/api/src/lib/approval-engine.ts` - Engine de aprovacao
 - `packages/db/prisma/schema/` - Schema Prisma dividido em arquivos
 - `apps/web/src/components/approval-timeline.tsx` - Componente de timeline de aprovacoes
+- `scripts/prod-db.sh` - Script para comandos no banco de producao
+- `vercel.json` - Configuracao do deploy Vercel
+
+## Fluxo de Deploy
+
+### Codigo (Automatico)
+1. Edita codigo localmente
+2. `git push origin main`
+3. Vercel detecta e faz deploy automatico (~1-2 min)
+
+### Schema do Banco (Manual)
+1. Edita `packages/db/prisma/schema/`
+2. Testa local: `npm run db:push`
+3. Aplica em producao: `./scripts/prod-db.sh push`
+
+### Dados/Seeds (Manual)
+1. Roda script com `./scripts/prod-db.sh [comando]`
+
+**Importante:** Os bancos local e producao sao independentes. Mudancas de schema/dados devem ser aplicadas em ambos.
+
+## Documentacao Adicional
+
+- `docs/DEPLOY.md` - Guia completo de deploy
+- `docs/REGRAS_NEGOCIO.md` - Regras de negocio do sistema
