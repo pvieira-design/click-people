@@ -211,4 +211,5 @@ Ver `docs/REGRAS_NEGOCIO.md` para documentacao completa das regras de negocio.
 ## Documentacao Adicional
 
 - `docs/DEPLOY.md` - Guia completo de deploy
+- `docs/GIT_WORKFLOW.md` - Guia de Git (branches, commits, como voltar atras)
 - `docs/REGRAS_NEGOCIO.md` - Regras de negocio do sistema
