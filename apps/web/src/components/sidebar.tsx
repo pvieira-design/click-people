@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
 
+import Logo from "./logo";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 
@@ -238,10 +239,15 @@ export default function Sidebar({ isAdmin = false }: SidebarProps) {
       <div className="flex h-14 items-center border-b px-4">
         {!collapsed && (
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-              CP
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+              <Logo size={20} className="text-primary-foreground" />
             </div>
             <span className="font-semibold">Click People</span>
+          </Link>
+        )}
+        {collapsed && (
+          <Link href="/dashboard" className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+            <Logo size={20} className="text-primary-foreground" />
           </Link>
         )}
         <Button
