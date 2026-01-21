@@ -167,7 +167,7 @@ export default function BonusPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Gestão de Bônus</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-green-600">Gestão de Bônus</h1>
           <p className="text-muted-foreground">
             Defina os tiers de bônus por área e visualize os valores calculados
           </p>
