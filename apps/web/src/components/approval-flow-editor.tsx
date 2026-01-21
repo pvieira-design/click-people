@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import {
   DndContext,
@@ -158,11 +158,21 @@ function SortableStep({
   );
 }
 
+interface StepWithId {
+  id: string;
+  areaId: string;
+}
+
 interface FlowEditorProps {
   requestType: RequestType;
   flow: FlowConfig;
   availableAreas: Array<{ id: string; name: string; description: string }>;
   onFlowChange: (steps: string[]) => void;
+}
+
+let globalStepIdCounter = 0;
+function generateStepId() {
+  return `step-${Date.now()}-${++globalStepIdCounter}`;
 }
 
 function FlowEditor({
@@ -172,6 +182,32 @@ function FlowEditor({
   onFlowChange,
 }: FlowEditorProps) {
   const [selectedArea, setSelectedArea] = useState<string>("");
+
+  // Track stable IDs for each step position
+  const stepsWithIdsRef = useRef<StepWithId[]>([]);
+
+  // Generate stable IDs - only regenerate when step count or values change from external source
+  const stepsWithIds = useMemo(() => {
+    const currentSteps = flow.steps;
+    const currentIds = stepsWithIdsRef.current;
+
+    // Check if we can reuse existing IDs (same length and same area values in same order)
+    const canReuse = currentIds.length === currentSteps.length &&
+      currentIds.every((item, idx) => item.areaId === currentSteps[idx]);
+
+    if (canReuse) {
+      return currentIds;
+    }
+
+    // Generate new IDs for the steps
+    const newStepsWithIds = currentSteps.map((areaId) => ({
+      id: generateStepId(),
+      areaId,
+    }));
+
+    stepsWithIdsRef.current = newStepsWithIds;
+    return newStepsWithIds;
+  }, [flow.steps]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -194,17 +230,21 @@ function FlowEditor({
       const { active, over } = event;
 
       if (over && active.id !== over.id) {
-        const oldIndex = flow.steps.findIndex((s) => s === active.id);
-        const newIndex = flow.steps.findIndex((s) => s === over.id);
+        const oldIndex = stepsWithIds.findIndex((s) => s.id === active.id);
+        const newIndex = stepsWithIds.findIndex((s) => s.id === over.id);
 
         // Prevent moving items before the first fixed step
-        if (newIndex === 0) return;
+        if (newIndex === 0 || oldIndex === 0 || oldIndex === -1 || newIndex === -1) return;
 
-        const newSteps = arrayMove(flow.steps, oldIndex, newIndex);
+        // Reorder both the IDs array and the steps
+        const newStepsWithIds = arrayMove(stepsWithIds, oldIndex, newIndex);
+        stepsWithIdsRef.current = newStepsWithIds;
+
+        const newSteps = newStepsWithIds.map((s) => s.areaId);
         onFlowChange(newSteps);
       }
     },
-    [flow.steps, onFlowChange]
+    [stepsWithIds, onFlowChange]
   );
 
   const handleAddStep = useCallback(() => {
@@ -217,6 +257,10 @@ function FlowEditor({
       return;
     }
 
+    // Add new step with a new ID
+    const newStepWithId = { id: generateStepId(), areaId: selectedArea };
+    stepsWithIdsRef.current = [...stepsWithIdsRef.current, newStepWithId];
+
     onFlowChange([...flow.steps, selectedArea]);
     setSelectedArea("");
   }, [selectedArea, flow.steps, onFlowChange]);
@@ -228,6 +272,9 @@ function FlowEditor({
         toast.error("O fluxo deve ter no mínimo 2 etapas");
         return;
       }
+
+      // Remove from IDs array too
+      stepsWithIdsRef.current = stepsWithIdsRef.current.filter((_, i) => i !== index);
 
       const newSteps = flow.steps.filter((_, i) => i !== index);
       onFlowChange(newSteps);
@@ -242,6 +289,8 @@ function FlowEditor({
       area.id !== flow.steps[flow.steps.length - 1] // Prevent consecutive duplicates
   );
 
+  const sortableItems = useMemo(() => stepsWithIds.map((s) => s.id), [stepsWithIds]);
+
   return (
     <div className="space-y-4">
       <DndContext
@@ -250,15 +299,15 @@ function FlowEditor({
         onDragEnd={handleDragEnd}
       >
         <SortableContext
-          items={flow.steps}
+          items={sortableItems}
           strategy={verticalListSortingStrategy}
         >
           <div className="min-h-[200px]">
-            {flow.steps.map((step, index) => (
+            {stepsWithIds.map((stepWithId, index) => (
               <SortableStep
-                key={step}
-                id={step}
-                step={step}
+                key={stepWithId.id}
+                id={stepWithId.id}
+                step={stepWithId.areaId}
                 stepNumber={index + 1}
                 isFirst={index === 0}
                 onRemove={() => handleRemoveStep(index)}
