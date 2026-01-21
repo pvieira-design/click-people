@@ -15,8 +15,22 @@ model User {
   positionId String?
   position   Position?  @relation(fields: [positionId], references: [id])
 
-  // Relações com áreas (um usuário pode pertencer a múltiplas áreas)
-  areas UserArea[]
+  // Nível hierárquico (para aprovações)
+  hierarchyLevelId String?
+  hierarchyLevel   HierarchyLevel? @relation(fields: [hierarchyLevelId], references: [id])
+
+  // Área do usuário (uma única área)
+  areaId String?
+  area   Area?   @relation(fields: [areaId], references: [id])
+
+  // Áreas que este usuário é responsável como C-level
+  cLevelOfAreas Area[] @relation("AreaCLevel")
+
+  // Áreas que este usuário dirige (pode ser diretor de múltiplas áreas)
+  directorOfAreas Area[] @relation("AreaDirector")
+
+  // Áreas que este usuário lidera
+  leaderOfAreas Area[] @relation("AreaLeader")
 
   // Relação opcional com prestador (se for colaborador com login)
   provider Provider?
@@ -35,6 +49,8 @@ model User {
   auditLogs AuditLog[]
 
   @@unique([email])
+  @@index([areaId])
+  @@index([hierarchyLevelId])
   @@map("user")
 }
 

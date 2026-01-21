@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -142,23 +143,21 @@ export default function NewRemunerationPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="provider">Prestador *</Label>
-              <Select
+              <SearchableSelect
+                options={
+                  providersQuery.data?.map((provider) => ({
+                    value: provider.id,
+                    label: provider.name,
+                    description: `${provider.area.name} - ${provider.position.name}`,
+                  })) || []
+                }
                 value={formData.providerId}
                 onValueChange={(value) =>
-                  value && setFormData({ ...formData, providerId: value })
+                  setFormData({ ...formData, providerId: value })
                 }
-              >
-                <SelectTrigger id="provider">
-                  <SelectValue placeholder="Selecione o prestador" />
-                </SelectTrigger>
-                <SelectContent>
-                  {providersQuery.data?.map((provider) => (
-                    <SelectItem key={provider.id} value={provider.id}>
-                      {provider.name} - {provider.area.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Buscar prestador..."
+                emptyMessage="Nenhum prestador encontrado."
+              />
             </div>
 
             {selectedProvider && (

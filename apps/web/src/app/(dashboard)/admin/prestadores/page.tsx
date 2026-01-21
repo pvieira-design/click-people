@@ -66,18 +66,17 @@ type Provider = {
   contractStatus: "SIGNED" | "NOT_SIGNED";
   isActive: boolean;
   area: { id: string; name: string };
-  position: { id: string; name: string; level: number };
+  position: { id: string; name: string };
+  hierarchyLevel: { id: string; name: string; level: number; canApprove: boolean } | null;
   user: { id: string; name: string; email: string } | null;
   createdAt: string | Date;
 };
-
-type Seniority = "JUNIOR" | "MID" | "SENIOR" | "LEAD" | "PRINCIPAL" | "NA";
 
 type FormData = {
   name: string;
   salary: string;
   startDate: string;
-  seniority: Seniority;
+  hierarchyLevelId: string;
   ndaStatus: "SIGNED" | "NOT_SIGNED";
   contractStatus: "SIGNED" | "NOT_SIGNED";
   areaId: string;
@@ -88,20 +87,11 @@ const initialFormData: FormData = {
   name: "",
   salary: "",
   startDate: new Date().toISOString().split("T")[0],
-  seniority: "NA",
+  hierarchyLevelId: "",
   ndaStatus: "NOT_SIGNED",
   contractStatus: "NOT_SIGNED",
   areaId: "",
   positionId: "",
-};
-
-const seniorityLabels: Record<Seniority, string> = {
-  JUNIOR: "Junior",
-  MID: "Pleno",
-  SENIOR: "Senior",
-  LEAD: "Lead",
-  PRINCIPAL: "Principal",
-  NA: "N/A",
 };
 
 export default function AdminPrestadoresPage() {
@@ -118,6 +108,7 @@ export default function AdminPrestadoresPage() {
   const providersQuery = useQuery(trpc.provider.list.queryOptions());
   const areasQuery = useQuery(trpc.area.list.queryOptions());
   const positionsQuery = useQuery(trpc.position.list.queryOptions());
+  const hierarchyLevelsQuery = useQuery(trpc.hierarchyLevel.list.queryOptions());
 
   // Mutations
   const createMutation = useMutation(
@@ -208,7 +199,7 @@ export default function AdminPrestadoresPage() {
       name: formData.name,
       salary: parseFloat(formData.salary),
       startDate: formData.startDate,
-      seniority: formData.seniority,
+      hierarchyLevelId: formData.hierarchyLevelId || undefined,
       ndaStatus: formData.ndaStatus,
       contractStatus: formData.contractStatus,
       areaId: formData.areaId,
@@ -224,7 +215,7 @@ export default function AdminPrestadoresPage() {
       name: formData.name,
       salary: parseFloat(formData.salary),
       startDate: formData.startDate,
-      seniority: formData.seniority,
+      hierarchyLevelId: formData.hierarchyLevelId || null,
       ndaStatus: formData.ndaStatus,
       contractStatus: formData.contractStatus,
       areaId: formData.areaId,
@@ -243,7 +234,7 @@ export default function AdminPrestadoresPage() {
       name: provider.name,
       salary: provider.salary.toString(),
       startDate: new Date(provider.startDate).toISOString().split("T")[0],
-      seniority: (provider.seniority as Seniority) || "NA",
+      hierarchyLevelId: provider.hierarchyLevel?.id || "",
       ndaStatus: provider.ndaStatus,
       contractStatus: provider.contractStatus,
       areaId: provider.area.id,
@@ -335,7 +326,7 @@ export default function AdminPrestadoresPage() {
                     <TableHead>Nome</TableHead>
                     <TableHead>Area</TableHead>
                     <TableHead>Cargo</TableHead>
-                    <TableHead>Nivel</TableHead>
+                    <TableHead>Senioridade</TableHead>
                     <TableHead>Salario</TableHead>
                     <TableHead>Inicio</TableHead>
                     <TableHead>NDA</TableHead>
@@ -351,9 +342,7 @@ export default function AdminPrestadoresPage() {
                       <TableCell>{provider.area.name}</TableCell>
                       <TableCell>{provider.position.name}</TableCell>
                       <TableCell>
-                        {provider.seniority && provider.seniority !== "NA"
-                          ? seniorityLabels[provider.seniority as Seniority]
-                          : "-"}
+                        {provider.hierarchyLevel?.name || "-"}
                       </TableCell>
                       <TableCell>{formatCurrency(provider.salary)}</TableCell>
                       <TableCell>
@@ -467,7 +456,12 @@ export default function AdminPrestadoresPage() {
                 <Label htmlFor="area">Area *</Label>
                 <Select
                   value={formData.areaId}
-                  onValueChange={(value) => value && setFormData({ ...formData, areaId: value })}
+                  onValueChange={(value) => {
+                    if (value) {
+                      // Limpa o cargo quando a area muda
+                      setFormData({ ...formData, areaId: value, positionId: "" });
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione">
@@ -488,43 +482,49 @@ export default function AdminPrestadoresPage() {
                 <Select
                   value={formData.positionId}
                   onValueChange={(value) => value && setFormData({ ...formData, positionId: value })}
+                  disabled={!formData.areaId}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione">
-                      {formData.positionId ? getPositionName(formData.positionId) : "Selecione"}
+                    <SelectValue placeholder={formData.areaId ? "Selecione" : "Selecione uma area primeiro"}>
+                      {formData.positionId ? getPositionName(formData.positionId) : (formData.areaId ? "Selecione" : "Selecione uma area primeiro")}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {positionsQuery.data?.map((position) => (
-                      <SelectItem key={position.id} value={position.id}>
-                        {position.name}
-                      </SelectItem>
-                    ))}
+                    {positionsQuery.data
+                      ?.filter((position) =>
+                        position.isGlobal || position.areas.some((a) => a.id === formData.areaId)
+                      )
+                      .map((position) => (
+                        <SelectItem key={position.id} value={position.id}>
+                          {position.name}{position.isGlobal ? " (Global)" : ""}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="seniority">Nivel</Label>
+                <Label htmlFor="seniority">Senioridade</Label>
                 <Select
-                  value={formData.seniority}
+                  value={formData.hierarchyLevelId}
                   onValueChange={(value) =>
-                    value && setFormData({ ...formData, seniority: value as Seniority })
+                    setFormData({ ...formData, hierarchyLevelId: value || "" })
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue>
-                      {seniorityLabels[formData.seniority]}
+                    <SelectValue placeholder="Selecione">
+                      {formData.hierarchyLevelId
+                        ? hierarchyLevelsQuery.data?.find((l) => l.id === formData.hierarchyLevelId)?.name
+                        : "Selecione"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="NA">N/A</SelectItem>
-                    <SelectItem value="JUNIOR">Junior</SelectItem>
-                    <SelectItem value="MID">Pleno</SelectItem>
-                    <SelectItem value="SENIOR">Senior</SelectItem>
-                    <SelectItem value="LEAD">Lead</SelectItem>
-                    <SelectItem value="PRINCIPAL">Principal</SelectItem>
+                    {hierarchyLevelsQuery.data?.map((level) => (
+                      <SelectItem key={level.id} value={level.id}>
+                        {level.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -622,7 +622,22 @@ export default function AdminPrestadoresPage() {
                 <Label htmlFor="edit-area">Area *</Label>
                 <Select
                   value={formData.areaId}
-                  onValueChange={(value) => value && setFormData({ ...formData, areaId: value })}
+                  onValueChange={(value) => {
+                    if (value) {
+                      // Verifica se o cargo atual esta disponivel na nova area
+                      const currentPositionAvailable = positionsQuery.data?.some(
+                        (p) =>
+                          p.id === formData.positionId &&
+                          (p.isGlobal || p.areas.some((a) => a.id === value))
+                      );
+                      // Limpa o cargo se nao estiver disponivel na nova area
+                      setFormData({
+                        ...formData,
+                        areaId: value,
+                        positionId: currentPositionAvailable ? formData.positionId : "",
+                      });
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione">
@@ -643,43 +658,49 @@ export default function AdminPrestadoresPage() {
                 <Select
                   value={formData.positionId}
                   onValueChange={(value) => value && setFormData({ ...formData, positionId: value })}
+                  disabled={!formData.areaId}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione">
-                      {formData.positionId ? getPositionName(formData.positionId) : "Selecione"}
+                    <SelectValue placeholder={formData.areaId ? "Selecione" : "Selecione uma area primeiro"}>
+                      {formData.positionId ? getPositionName(formData.positionId) : (formData.areaId ? "Selecione" : "Selecione uma area primeiro")}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {positionsQuery.data?.map((position) => (
-                      <SelectItem key={position.id} value={position.id}>
-                        {position.name}
-                      </SelectItem>
-                    ))}
+                    {positionsQuery.data
+                      ?.filter((position) =>
+                        position.isGlobal || position.areas.some((a) => a.id === formData.areaId)
+                      )
+                      .map((position) => (
+                        <SelectItem key={position.id} value={position.id}>
+                          {position.name}{position.isGlobal ? " (Global)" : ""}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="edit-seniority">Nivel</Label>
+                <Label htmlFor="edit-seniority">Senioridade</Label>
                 <Select
-                  value={formData.seniority}
+                  value={formData.hierarchyLevelId}
                   onValueChange={(value) =>
-                    value && setFormData({ ...formData, seniority: value as Seniority })
+                    setFormData({ ...formData, hierarchyLevelId: value || "" })
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue>
-                      {seniorityLabels[formData.seniority]}
+                    <SelectValue placeholder="Selecione">
+                      {formData.hierarchyLevelId
+                        ? hierarchyLevelsQuery.data?.find((l) => l.id === formData.hierarchyLevelId)?.name
+                        : "Selecione"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="NA">N/A</SelectItem>
-                    <SelectItem value="JUNIOR">Junior</SelectItem>
-                    <SelectItem value="MID">Pleno</SelectItem>
-                    <SelectItem value="SENIOR">Senior</SelectItem>
-                    <SelectItem value="LEAD">Lead</SelectItem>
-                    <SelectItem value="PRINCIPAL">Principal</SelectItem>
+                    {hierarchyLevelsQuery.data?.map((level) => (
+                      <SelectItem key={level.id} value={level.id}>
+                        {level.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

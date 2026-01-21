@@ -1,12 +1,17 @@
 /**
  * Engine de Aprovação - Click People
  *
- * Fluxos de aprovação por módulo (hardcoded):
- * - Recesso/Férias: Dir. Área → Dir. RH → CEO
- * - Desligamento: Dir. Área → Dir. RH → CEO
- * - Contratação: Dir. Área → Dir. RH → CFO → CEO
- * - Solicitação de Compra: Dir. Área → CFO
- * - Mudança de Remuneração: Dir. Área → Dir. RH → CFO → CEO
+ * Sistema simplificado baseado em ÁREAS:
+ * - Cada etapa de aprovação é responsabilidade de uma ÁREA específica
+ * - Quem pode aprovar: Diretor ou C-Level DESIGNADO da área
+ *
+ * Fluxos de aprovação são configuráveis via SystemConfig (APPROVAL_FLOWS)
+ * Padrão se não configurado:
+ * - Recesso/Férias: Área do Request → RH → Diretoria
+ * - Desligamento: Área do Request → RH → Diretoria
+ * - Contratação: Área do Request → RH → Financeiro → Diretoria
+ * - Solicitação de Compra: Área do Request → Financeiro
+ * - Mudança de Remuneração: Área do Request → RH → Financeiro → Diretoria
  */
 
 import prisma from "@click-people/db";
@@ -19,43 +24,30 @@ export type RequestType =
   | "PURCHASE"
   | "REMUNERATION";
 
-// Roles de aprovação
-export type ApprovalRole = "AREA_DIRECTOR" | "HR_DIRECTOR" | "CFO" | "CEO";
+// Roles de aprovação (DEPRECATED - mantido para compatibilidade com dados existentes)
+export type ApprovalRole = "AREA_DIRECTOR" | "HR_DIRECTOR" | "CFO" | "CEO" | "PARTNER";
 
-// Níveis hierárquicos
-export const POSITION_LEVELS = {
-  ANALYST: 10,
-  MANAGER: 50,
-  HEAD: 70,
-  DIRECTOR: 80,
-  HR_DIRECTOR: 90,
-  CFO: 95,
-  CEO: 100,
-} as const;
+// Identificadores de área para fluxos de aprovação
+// "REQUEST_AREA" = área do prestador/solicitante
+// Outros = nomes de áreas específicas no banco
+export type ApprovalAreaIdentifier = "REQUEST_AREA" | string;
 
-// Definição dos fluxos por tipo de solicitação
-export const APPROVAL_FLOWS: Record<RequestType, ApprovalRole[]> = {
-  RECESS: ["AREA_DIRECTOR", "HR_DIRECTOR", "CEO"],
-  TERMINATION: ["AREA_DIRECTOR", "HR_DIRECTOR", "CEO"],
-  HIRING: ["AREA_DIRECTOR", "HR_DIRECTOR", "CFO", "CEO"],
-  PURCHASE: ["AREA_DIRECTOR", "CFO"],
-  REMUNERATION: ["AREA_DIRECTOR", "HR_DIRECTOR", "CFO", "CEO"],
+// Definição dos fluxos padrão por tipo de solicitação (baseado em áreas)
+export const DEFAULT_APPROVAL_FLOWS: Record<RequestType, ApprovalAreaIdentifier[]> = {
+  RECESS: ["REQUEST_AREA", "RH", "Diretoria"],
+  TERMINATION: ["REQUEST_AREA", "RH", "Diretoria"],
+  HIRING: ["REQUEST_AREA", "RH", "Financeiro", "Diretoria"],
+  PURCHASE: ["REQUEST_AREA", "Financeiro"],
+  REMUNERATION: ["REQUEST_AREA", "RH", "Financeiro", "Diretoria"],
 };
 
-// Mapeamento de role para nível mínimo
-export const ROLE_MIN_LEVELS: Record<ApprovalRole, number> = {
-  AREA_DIRECTOR: POSITION_LEVELS.DIRECTOR,
-  HR_DIRECTOR: POSITION_LEVELS.HR_DIRECTOR,
-  CFO: POSITION_LEVELS.CFO,
-  CEO: POSITION_LEVELS.CEO,
-};
-
-// Labels para exibição
+// Labels para exibição (DEPRECATED - mantido para compatibilidade)
 export const ROLE_LABELS: Record<ApprovalRole, string> = {
   AREA_DIRECTOR: "Diretor da Área",
   HR_DIRECTOR: "Diretor RH",
   CFO: "CFO",
   CEO: "CEO",
+  PARTNER: "Sócio",
 };
 
 export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
@@ -66,8 +58,93 @@ export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
   REMUNERATION: "Mudança de Remuneração",
 };
 
+// Níveis hierárquicos simplificados
+// O cargo (Position) define a função específica (CFO, CEO, etc.)
+// O nível hierárquico define a senioridade para aprovações
+export const HIERARCHY_LEVELS = {
+  JUNIOR: 10,
+  MID: 20,
+  SENIOR: 30,
+  SPECIALIST: 35,
+  COORDINATOR: 40,
+  MANAGER: 50,
+  HEAD: 70,
+  DIRECTOR: 80,   // Diretoria
+  C_LEVEL: 90,    // C-level (CFO, CEO, COO, etc. - definido pelo cargo)
+  VP: 105,        // Vice Presidente
+  PARTNER: 110,   // Sócio
+} as const;
+
+// Mapeamento de role para nível mínimo (simplificado)
+export const ROLE_MIN_LEVELS: Record<ApprovalRole, number> = {
+  AREA_DIRECTOR: HIERARCHY_LEVELS.DIRECTOR,
+  HR_DIRECTOR: HIERARCHY_LEVELS.C_LEVEL,
+  CFO: HIERARCHY_LEVELS.C_LEVEL,
+  CEO: HIERARCHY_LEVELS.C_LEVEL,
+  PARTNER: HIERARCHY_LEVELS.PARTNER,
+};
+
+/**
+ * Busca os fluxos de aprovação configurados no banco
+ * Retorna o padrão se não houver configuração
+ */
+async function getApprovalFlows(): Promise<Record<RequestType, ApprovalAreaIdentifier[]>> {
+  try {
+    const config = await prisma.systemConfig.findUnique({
+      where: { key: "APPROVAL_FLOWS" },
+    });
+
+    if (!config) {
+      return DEFAULT_APPROVAL_FLOWS;
+    }
+
+    const value = config.value as {
+      flows?: Record<RequestType, { enabled: boolean; steps: string[] }>;
+    };
+
+    if (!value?.flows) {
+      return DEFAULT_APPROVAL_FLOWS;
+    }
+
+    // Converter do formato de config para o formato usado internamente
+    const flows: Record<RequestType, ApprovalAreaIdentifier[]> = {
+      RECESS: value.flows.RECESS?.steps || DEFAULT_APPROVAL_FLOWS.RECESS,
+      TERMINATION: value.flows.TERMINATION?.steps || DEFAULT_APPROVAL_FLOWS.TERMINATION,
+      HIRING: value.flows.HIRING?.steps || DEFAULT_APPROVAL_FLOWS.HIRING,
+      PURCHASE: value.flows.PURCHASE?.steps || DEFAULT_APPROVAL_FLOWS.PURCHASE,
+      REMUNERATION: value.flows.REMUNERATION?.steps || DEFAULT_APPROVAL_FLOWS.REMUNERATION,
+    };
+
+    return flows;
+  } catch {
+    return DEFAULT_APPROVAL_FLOWS;
+  }
+}
+
+/**
+ * Busca a área pelo nome
+ */
+async function getAreaByName(name: string): Promise<{ id: string; name: string } | null> {
+  return prisma.area.findUnique({
+    where: { name },
+    select: { id: true, name: true },
+  });
+}
+
+/**
+ * Mapeia o identificador da área para um role legado (para compatibilidade)
+ */
+function getDefaultRole(areaIdentifier: ApprovalAreaIdentifier, stepNumber: number): ApprovalRole {
+  if (areaIdentifier === "REQUEST_AREA") return "AREA_DIRECTOR";
+  if (areaIdentifier === "RH") return "HR_DIRECTOR";
+  if (areaIdentifier === "Financeiro") return "CFO";
+  if (areaIdentifier === "Diretoria") return "PARTNER";
+  return "AREA_DIRECTOR";
+}
+
 /**
  * Cria as etapas de aprovação para uma solicitação
+ * NOTA: Auto-aprovação foi removida - todas as etapas requerem aprovação manual
  */
 export async function createApprovalSteps(
   requestType: RequestType,
@@ -76,66 +153,33 @@ export async function createApprovalSteps(
   creatorId: string,
   requestAreaId?: string
 ): Promise<void> {
-  const flow = APPROVAL_FLOWS[requestType];
+  // Buscar fluxos configurados do banco
+  const flows = await getApprovalFlows();
+  const flow = flows[requestType];
 
-  // Buscar dados do criador
-  const creator = await prisma.user.findUnique({
-    where: { id: creatorId },
-    include: {
-      position: true,
-      areas: {
-        include: { area: true },
-      },
-    },
-  });
-
-  if (!creator) throw new Error("Criador não encontrado");
-
-  const creatorLevel = creator.position?.level || 0;
-  const creatorAreaIds = creator.areas.map((a) => a.areaId);
-  const isCFO = creatorLevel >= POSITION_LEVELS.CFO;
-  const isDirector = creatorLevel >= POSITION_LEVELS.DIRECTOR;
-  const isCreatorAreaDirector = isDirector && requestAreaId && creatorAreaIds.includes(requestAreaId);
-
-  // Auto-aprovação especial para CFO em compras
-  if (requestType === "PURCHASE" && isCFO) {
-    // Todas as etapas são auto-aprovadas
-    for (let i = 0; i < flow.length; i++) {
-      await prisma.approvalStep.create({
-        data: {
-          stepNumber: i + 1,
-          role: flow[i],
-          status: "APPROVED",
-          approverId: creatorId,
-          approvedAt: new Date(),
-          comment: "Auto-aprovado (CFO)",
-          [requestField]: requestId,
-        },
-      });
-    }
-    return;
-  }
-
-  // Criar etapas normais
+  // Criar etapas - todas começam como PENDING (sem auto-aprovação)
   for (let i = 0; i < flow.length; i++) {
-    const role = flow[i];
+    const areaIdentifier = flow[i];
     const stepNumber = i + 1;
 
-    // Verificar auto-aprovação da 1ª etapa (Diretor da própria área)
-    const isFirstStep = stepNumber === 1;
-    const shouldAutoApprove =
-      isFirstStep &&
-      role === "AREA_DIRECTOR" &&
-      isCreatorAreaDirector;
+    // Determinar a área de aprovação
+    let approvalAreaId: string | null = null;
+    if (areaIdentifier === "REQUEST_AREA") {
+      approvalAreaId = requestAreaId || null;
+    } else {
+      const area = await getAreaByName(areaIdentifier);
+      approvalAreaId = area?.id || null;
+    }
 
     await prisma.approvalStep.create({
       data: {
         stepNumber,
-        role,
-        status: shouldAutoApprove ? "APPROVED" : "PENDING",
-        approverId: shouldAutoApprove ? creatorId : null,
-        approvedAt: shouldAutoApprove ? new Date() : null,
-        comment: shouldAutoApprove ? "Auto-aprovado (Diretor da área)" : null,
+        role: getDefaultRole(areaIdentifier, stepNumber),
+        approvalAreaId,
+        status: "PENDING",
+        approverId: null,
+        approvedAt: null,
+        comment: null,
         [requestField]: requestId,
       },
     });
@@ -143,42 +187,157 @@ export async function createApprovalSteps(
 }
 
 /**
+ * Resultado da verificação de permissão de aprovação
+ */
+export interface ApprovalPermissionResult {
+  canApprove: boolean;
+  isDesignatedApprover: boolean;
+  isAdminOverride: boolean;
+}
+
+/**
  * Verifica se um usuário pode aprovar uma etapa específica
+ * NOVO: Baseado em áreas - o usuário precisa ser Diretor ou C-Level DESIGNADO da área
+ * Retorna também se é um admin override (admin aprovando sem ser o aprovador designado)
  */
 export async function canUserApproveStep(
   userId: string,
   stepRole: ApprovalRole,
-  requestAreaId?: string
+  requestAreaId?: string,
+  approvalAreaId?: string
 ): Promise<boolean> {
+  const result = await checkApprovalPermission(userId, stepRole, requestAreaId, approvalAreaId);
+  return result.canApprove;
+}
+
+/**
+ * Verifica permissões de aprovação com detalhes
+ * Retorna se pode aprovar, se é o aprovador designado, e se é admin override
+ */
+export async function checkApprovalPermission(
+  userId: string,
+  stepRole: ApprovalRole,
+  requestAreaId?: string,
+  approvalAreaId?: string
+): Promise<ApprovalPermissionResult> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {
-      position: true,
-      areas: true,
+      hierarchyLevel: true,
+      area: true,
+      cLevelOfAreas: true,
+      directorOfAreas: true,
     },
   });
 
-  if (!user || !user.position) return false;
-
-  const userLevel = user.position.level;
-  const minLevel = ROLE_MIN_LEVELS[stepRole];
-
-  // Verifica nível mínimo
-  if (userLevel < minLevel) return false;
-
-  // Para Diretor da Área, verifica se é da área correta
-  if (stepRole === "AREA_DIRECTOR" && requestAreaId) {
-    const userAreaIds = user.areas.map((a) => a.areaId);
-    if (!userAreaIds.includes(requestAreaId)) return false;
+  if (!user) {
+    return { canApprove: false, isDesignatedApprover: false, isAdminOverride: false };
   }
 
-  // Admin pode tudo
-  if (user.isAdmin) return true;
+  // Determinar qual área precisa aprovar
+  const targetAreaId = approvalAreaId || requestAreaId;
 
-  // Verifica permissão de aprovar do cargo
-  if (!user.position.canApprove) return false;
+  // Verificar se o usuário é o diretor ou C-Level DESIGNADO da área de aprovação
+  let isDesignatedApprover = false;
+  if (targetAreaId) {
+    const isDesignatedDirector = user.directorOfAreas.some((area) => area.id === targetAreaId);
+    const isDesignatedCLevel = user.cLevelOfAreas.some((area) => area.id === targetAreaId);
+    isDesignatedApprover = isDesignatedDirector || isDesignatedCLevel;
+  }
 
-  return true;
+  // Se é o aprovador designado, pode aprovar normalmente
+  if (isDesignatedApprover) {
+    return { canApprove: true, isDesignatedApprover: true, isAdminOverride: false };
+  }
+
+  // Se é admin mas não é o aprovador designado, é admin override
+  if (user.isAdmin) {
+    return { canApprove: true, isDesignatedApprover: false, isAdminOverride: true };
+  }
+
+  // Não pode aprovar
+  return { canApprove: false, isDesignatedApprover: false, isAdminOverride: false };
+}
+
+/**
+ * Obtém todos os usuários que podem aprovar uma etapa específica
+ * NOVO: Retorna Diretor + C-Level da área de aprovação
+ */
+export async function getPotentialApprovers(
+  stepRole: ApprovalRole,
+  requestAreaId?: string,
+  approvalAreaId?: string
+): Promise<Array<{ id: string; name: string; email: string }>> {
+  // Determinar qual área precisa aprovar
+  const targetAreaId = approvalAreaId || requestAreaId;
+  if (!targetAreaId) return [];
+
+  // Buscar a área com seu diretor e C-Level designados
+  const area = await prisma.area.findUnique({
+    where: { id: targetAreaId },
+    include: {
+      director: {
+        select: { id: true, name: true, email: true },
+      },
+      cLevel: {
+        select: { id: true, name: true, email: true },
+      },
+    },
+  });
+
+  if (!area) return [];
+
+  const approvers: Array<{ id: string; name: string; email: string }> = [];
+  if (area.director) approvers.push(area.director);
+  if (area.cLevel && area.cLevel.id !== area.director?.id) {
+    approvers.push(area.cLevel);
+  }
+
+  return approvers;
+}
+
+/**
+ * Obtém o aprovador designado para uma etapa
+ * Retorna null se não houver aprovador configurado
+ */
+export async function getDesignatedApprover(
+  stepRole: ApprovalRole,
+  requestAreaId?: string,
+  approvalAreaId?: string
+): Promise<{ id: string; name: string; email: string } | null> {
+  // Determinar qual área precisa aprovar
+  const targetAreaId = approvalAreaId || requestAreaId;
+  if (!targetAreaId) return null;
+
+  // Buscar a área com seu diretor e C-Level
+  const area = await prisma.area.findUnique({
+    where: { id: targetAreaId },
+    include: {
+      director: {
+        select: { id: true, name: true, email: true },
+      },
+      cLevel: {
+        select: { id: true, name: true, email: true },
+      },
+    },
+  });
+
+  // Retorna o diretor, ou o C-Level se não houver diretor
+  return area?.director || area?.cLevel || null;
+}
+
+/**
+ * Obtém o nome da área de aprovação para exibição
+ */
+export async function getApprovalAreaName(approvalAreaId: string | null): Promise<string> {
+  if (!approvalAreaId) return "Área não definida";
+
+  const area = await prisma.area.findUnique({
+    where: { id: approvalAreaId },
+    select: { name: true },
+  });
+
+  return area?.name || "Área não encontrada";
 }
 
 /**
@@ -192,11 +351,20 @@ export async function approveStep(
   const step = await prisma.approvalStep.findUnique({
     where: { id: stepId },
     include: {
-      recessRequest: true,
-      terminationRequest: true,
+      approvalArea: true,
+      recessRequest: {
+        include: { provider: { select: { areaId: true } } },
+      },
+      terminationRequest: {
+        include: { provider: { select: { areaId: true } } },
+      },
       hiringRequest: true,
-      purchaseRequest: true,
-      remunerationRequest: true,
+      purchaseRequest: {
+        include: { creator: { select: { areaId: true } } },
+      },
+      remunerationRequest: {
+        include: { provider: { select: { areaId: true } } },
+      },
     },
   });
 
@@ -206,8 +374,13 @@ export async function approveStep(
   // Determinar qual request está associado
   const requestAreaId = getRequestAreaId(step);
 
-  // Verificar permissão
-  const canApprove = await canUserApproveStep(approverId, step.role, requestAreaId);
+  // Verificar permissão (usando a área de aprovação da etapa)
+  const canApprove = await canUserApproveStep(
+    approverId,
+    step.role,
+    requestAreaId,
+    step.approvalAreaId || undefined
+  );
   if (!canApprove) throw new Error("Sem permissão para aprovar esta etapa");
 
   // Aprovar etapa
@@ -238,7 +411,6 @@ export async function approveStep(
   const isFullyApproved = !nextPendingStep;
 
   if (isFullyApproved) {
-    // Atualizar status da solicitação para APPROVED
     await updateRequestStatus(step, "APPROVED");
   }
 
@@ -264,11 +436,20 @@ export async function rejectStep(
   const step = await prisma.approvalStep.findUnique({
     where: { id: stepId },
     include: {
-      recessRequest: true,
-      terminationRequest: true,
+      approvalArea: true,
+      recessRequest: {
+        include: { provider: { select: { areaId: true } } },
+      },
+      terminationRequest: {
+        include: { provider: { select: { areaId: true } } },
+      },
       hiringRequest: true,
-      purchaseRequest: true,
-      remunerationRequest: true,
+      purchaseRequest: {
+        include: { creator: { select: { areaId: true } } },
+      },
+      remunerationRequest: {
+        include: { provider: { select: { areaId: true } } },
+      },
     },
   });
 
@@ -278,8 +459,13 @@ export async function rejectStep(
   // Determinar qual request está associado
   const requestAreaId = getRequestAreaId(step);
 
-  // Verificar permissão
-  const canApprove = await canUserApproveStep(approverId, step.role, requestAreaId);
+  // Verificar permissão (usando a área de aprovação da etapa)
+  const canApprove = await canUserApproveStep(
+    approverId,
+    step.role,
+    requestAreaId,
+    step.approvalAreaId || undefined
+  );
   if (!canApprove) throw new Error("Sem permissão para rejeitar esta etapa");
 
   // Rejeitar etapa
@@ -313,6 +499,7 @@ export async function getCurrentPendingStep(
     },
     orderBy: { stepNumber: "asc" },
     include: {
+      approvalArea: true,
       approver: {
         select: { id: true, name: true },
       },
@@ -335,6 +522,7 @@ export async function getApprovalSteps(
     },
     orderBy: { stepNumber: "asc" },
     include: {
+      approvalArea: true,
       approver: {
         select: { id: true, name: true },
       },
@@ -344,11 +532,11 @@ export async function getApprovalSteps(
 
 // Funções auxiliares
 function getRequestAreaId(step: any): string | undefined {
-  if (step.recessRequest) return step.recessRequest.providerArea;
-  if (step.terminationRequest) return step.terminationRequest.providerArea;
+  if (step.recessRequest) return step.recessRequest.provider?.areaId;
+  if (step.terminationRequest) return step.terminationRequest.provider?.areaId;
   if (step.hiringRequest) return step.hiringRequest.areaId;
-  if (step.purchaseRequest) return step.purchaseRequest.requesterArea;
-  if (step.remunerationRequest) return step.remunerationRequest.providerArea;
+  if (step.purchaseRequest) return step.purchaseRequest.creator?.areaId;
+  if (step.remunerationRequest) return step.remunerationRequest.provider?.areaId;
   return undefined;
 }
 

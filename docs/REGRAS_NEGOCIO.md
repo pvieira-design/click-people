@@ -1,6 +1,6 @@
 # Regras de Negócio - Click People
 
-**Versão:** 1.0 | **Data:** Janeiro 2026  
+**Versão:** 1.1 | **Data:** Janeiro 2026  
 **Sistema:** Click People (Gestão de Capital Humano)  
 **Cliente:** Click Cannabis
 
@@ -119,7 +119,7 @@ O Click People é um sistema de gestão de capital humano que controla e automat
 3. Criador pode excluir solicitação PENDENTE (ou admin)
 4. Aprovadores DEVEM adicionar comentário em rejeições
 5. Histórico de aprovações é mantido em cada solicitação
-6. Fluxos são **HARDCODED** (não configuráveis no MVP)
+6. Fluxos são **CONFIGURÁVEIS** via Admin > Configurações
 
 ### 4.2 Estados de Solicitação
 
@@ -131,28 +131,40 @@ O Click People é um sistema de gestão de capital humano que controla e automat
 
 ### 4.3 Fluxos por Módulo
 
+**Nota:** Os fluxos abaixo são os valores **padrão**. Admin pode configurar as etapas de cada fluxo via Admin > Configurações (interface drag-and-drop).
+
 | Módulo | Etapa 1 | Etapa 2 | Etapa 3 | Etapa 4 |
 |--------|---------|---------|---------|---------|
-| Recesso/Férias | Dir. Área | Dir. RH | CEO | - |
-| Desligamento | Dir. Área | Dir. RH | CEO | - |
-| Contratação | Dir. Área | Dir. RH | CFO | CEO |
-| Solicitação de Compra | Dir. Área | CFO | - | - |
-| Mudança de Remuneração | Dir. Área | Dir. RH | CFO | CEO |
+| Recesso/Férias | Área da Solicitação | RH | Sócio | - |
+| Desligamento | Área da Solicitação | RH | Sócio | - |
+| Contratação | Área da Solicitação | RH | Financeiro | Sócio |
+| Solicitação de Compra | Área da Solicitação | Financeiro | - | - |
+| Mudança de Remuneração | Área da Solicitação | RH | Financeiro | Sócio |
 
-### 4.4 Regra de Auto-Aprovação
+**Regra:** A primeira etapa é sempre a **Área da Solicitação** (REQUEST_AREA) e não pode ser removida.
 
-**Cenário 1: Diretor cria solicitação de sua própria área**
-- A 1ª etapa (Diretor Área) é automaticamente aprovada
-- Nome do aprovador = próprio criador
-- Solicitação inicia na 2ª etapa
+### 4.4 Aprovação Manual Obrigatória
 
-**Cenário 2: CFO cria Solicitação de Compra**
-- Todas as etapas são automaticamente aprovadas
-- Solicitação já nasce como "Aprovada"
+**Todas as etapas requerem aprovação manual.** Não existe auto-aprovação no sistema.
 
-**Cenário 3: Diretor cria Solicitação de Compra de sua área**
-- Apenas a 1ª etapa é auto-aprovada
-- Ainda precisa aprovação do CFO
+- Mesmo que um diretor crie solicitação de sua própria área, a etapa precisa ser aprovada manualmente
+- Mesmo que o CFO crie uma Solicitação de Compra, as etapas precisam ser aprovadas
+- A solicitação sempre inicia com todas as etapas em status PENDENTE
+
+### 4.5 Aprovação como Admin (Override)
+
+Quando um administrador aprova uma etapa no lugar do aprovador designado:
+- O sistema registra que foi uma aprovação "como admin"
+- A timeline de aprovação exibe um aviso visual indicando que a aprovação foi feita por admin
+- O histórico mantém registro de quem realmente aprovou
+
+### 4.6 Fluxos Configuráveis
+
+Os fluxos de aprovação podem ser configurados via Admin > Configurações:
+- Interface drag-and-drop para reordenar etapas
+- Possibilidade de adicionar ou remover áreas do fluxo
+- A primeira etapa (Área da Solicitação) é fixa e não pode ser removida
+- Configurações são salvas no banco de dados (tabela SystemConfig)
 
 ---
 
@@ -277,8 +289,7 @@ Gerenciar solicitações de aprovação de despesas e compras.
 ### 8.3 Regras de Negócio
 
 1. **Dados automáticos:** Solicitante, área e cargo preenchidos do perfil logado
-2. **Auto-aprovação CFO:** Se CFO cria, TODAS etapas são auto-aprovadas
-3. **Auto-aprovação Diretor:** Se Diretor cria para sua área, 1ª etapa auto-aprovada
+2. **Aprovação manual:** Todas as etapas requerem aprovação manual (não há auto-aprovação)
 
 ### 8.4 Configuração Futura (já implementar estrutura)
 
@@ -541,7 +552,6 @@ Admin > Prestadores permite:
 | Prestador | Pessoa física/jurídica que presta serviço à Click Cannabis |
 | Folha | Conjunto de prestadores ativos e seus dados contratuais |
 | Etapa | Passo no fluxo de aprovação |
-| Hardcoded | Configuração fixa no código, não editável pelo usuário |
 | MVP | Minimum Viable Product - versão inicial funcional |
 
 ---

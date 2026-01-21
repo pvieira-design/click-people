@@ -3,17 +3,31 @@
 // =============================================
 
 model Position {
-  id         String    @id @default(cuid())
-  name       String    @unique
-  level      Int       // 10=Analista, 50=Gerente, 70=Head, 80=Diretor, 90=Dir.RH, 95=CFO, 100=CEO
-  canApprove Boolean   @default(false)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id         String   @id @default(cuid())
+  name       String   @unique
+  level      Int      @default(10) // DEPRECATED: migrar para HierarchyLevel
+  canApprove Boolean  @default(false) // DEPRECATED: migrar para HierarchyLevel
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users     User[]
+  providers Provider[]
+  areas     AreaPosition[] // Áreas onde este cargo está disponível
+
+  @@map("position")
+}
+
+// Níveis hierárquicos para fluxo de aprovação
+model HierarchyLevel {
+  id         String  @id @default(cuid())
+  name       String  @unique
+  level      Int     @unique // 10=Junior, 20=Pleno, ..., 80=Diretor, 90=Dir.RH, 95=CFO, 100=CEO
+  canApprove Boolean @default(false)
 
   users     User[]
   providers Provider[]
 
-  @@map("position")
+  @@map("hierarchy_level")
 }
 
 model Area {
@@ -22,21 +36,41 @@ model Area {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users        UserArea[]
+  // C-level responsável pela área (visão executiva)
+  cLevelId String?
+  cLevel   User?   @relation("AreaCLevel", fields: [cLevelId], references: [id])
+
+  // Diretor responsável pela área (aprovador de 1ª etapa)
+  directorId String?
+  director   User?   @relation("AreaDirector", fields: [directorId], references: [id])
+
+  // Líder da área (pode abrir solicitações)
+  leaderId String?
+  leader   User?   @relation("AreaLeader", fields: [leaderId], references: [id])
+
+  users        User[]         // Usuários desta área (1:N)
   providers    Provider[]
   bonusRecords BonusRecord[]
+  positions    AreaPosition[] // Cargos disponíveis nesta área
 
+  // Etapas de aprovação onde esta área é responsável
+  approvalSteps ApprovalStep[] @relation("ApprovalStepArea")
+
+  @@index([cLevelId])
+  @@index([directorId])
+  @@index([leaderId])
   @@map("area")
 }
 
-model UserArea {
-  userId String
-  areaId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  area   Area   @relation(fields: [areaId], references: [id], onDelete: Cascade)
+// Tabela de junção N:N entre Area e Position
+model AreaPosition {
+  areaId     String
+  positionId String
+  area       Area     @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
 
-  @@id([userId, areaId])
-  @@map("user_area")
+  @@id([areaId, positionId])
+  @@map("area_position")
 }
 
 // =============================================
@@ -56,10 +90,12 @@ model Provider {
   updatedAt      DateTime       @updatedAt
 
   // Relações
-  areaId     String
-  area       Area     @relation(fields: [areaId], references: [id])
-  positionId String
-  position   Position @relation(fields: [positionId], references: [id])
+  areaId           String
+  area             Area            @relation(fields: [areaId], references: [id])
+  positionId       String
+  position         Position        @relation(fields: [positionId], references: [id])
+  hierarchyLevelId String?
+  hierarchyLevel   HierarchyLevel? @relation(fields: [hierarchyLevelId], references: [id])
 
   // Relação opcional com usuário (se tiver login)
   userId String? @unique
@@ -113,6 +149,7 @@ enum ApprovalRole {
   HR_DIRECTOR
   CFO
   CEO
+  PARTNER
 }
 
 // =============================================
@@ -300,12 +337,16 @@ model RemunerationRequest {
 model ApprovalStep {
   id           String        @id @default(cuid())
   stepNumber   Int           // 1, 2, 3, 4
-  role         ApprovalRole  // Quem deve aprovar esta etapa
+  role         ApprovalRole  // DEPRECATED: mantido para compatibilidade
   status       RequestStatus @default(PENDING)
   comment      String?       @db.Text // Obrigatório em rejeições
   approvedAt   DateTime?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+
+  // Área responsável por aprovar esta etapa (novo sistema baseado em áreas)
+  approvalAreaId String?
+  approvalArea   Area?   @relation("ApprovalStepArea", fields: [approvalAreaId], references: [id])
 
   // Quem aprovou/rejeitou
   approverId String?
@@ -324,6 +365,7 @@ model ApprovalStep {
   remunerationRequest   RemunerationRequest? @relation(fields: [remunerationRequestId], references: [id], onDelete: Cascade)
 
   @@index([approverId])
+  @@index([approvalAreaId])
   @@index([recessRequestId])
   @@index([terminationRequestId])
   @@index([hiringRequestId])

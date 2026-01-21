@@ -1,8 +1,9 @@
 import { z } from "zod";
 
+import { auth } from "@click-people/auth";
 import prisma from "@click-people/db";
 
-import { protectedProcedure, publicProcedure, router } from "../index";
+import { protectedProcedure, router } from "../index";
 
 export const userRouter = router({
   // Obter dados do usuario atual com status
@@ -11,11 +12,8 @@ export const userRouter = router({
       where: { id: ctx.session.user.id },
       include: {
         position: true,
-        areas: {
-          include: {
-            area: true,
-          },
-        },
+        hierarchyLevel: true,
+        area: true,
       },
     });
 
@@ -30,7 +28,8 @@ export const userRouter = router({
       status: user.status,
       isAdmin: user.isAdmin,
       position: user.position,
-      areas: user.areas.map((ua) => ua.area),
+      hierarchyLevel: user.hierarchyLevel,
+      area: user.area,
     };
   }),
 
@@ -47,9 +46,13 @@ export const userRouter = router({
     const users = await prisma.user.findMany({
       include: {
         position: true,
-        areas: {
-          include: {
-            area: true,
+        hierarchyLevel: true,
+        area: true,
+        provider: {
+          select: {
+            id: true,
+            name: true,
+            hierarchyLevel: true,
           },
         },
       },
@@ -63,7 +66,9 @@ export const userRouter = router({
       status: user.status,
       isAdmin: user.isAdmin,
       position: user.position,
-      areas: user.areas.map((ua) => ua.area),
+      hierarchyLevel: user.hierarchyLevel,
+      area: user.area,
+      provider: user.provider,
       createdAt: user.createdAt,
     }));
   }),
@@ -92,7 +97,8 @@ export const userRouter = router({
       z.object({
         userId: z.string(),
         positionId: z.string().optional(),
-        areaIds: z.array(z.string()).optional(),
+        hierarchyLevelId: z.string().optional(),
+        areaId: z.string().optional(),
         isAdmin: z.boolean().optional(),
       })
     )
@@ -111,25 +117,11 @@ export const userRouter = router({
         data: {
           status: "ACTIVE",
           positionId: input.positionId,
+          hierarchyLevelId: input.hierarchyLevelId,
+          areaId: input.areaId,
           isAdmin: input.isAdmin,
         },
       });
-
-      // Vincular areas se fornecidas
-      if (input.areaIds && input.areaIds.length > 0) {
-        // Remover areas existentes
-        await prisma.userArea.deleteMany({
-          where: { userId: input.userId },
-        });
-
-        // Adicionar novas areas
-        await prisma.userArea.createMany({
-          data: input.areaIds.map((areaId) => ({
-            userId: input.userId,
-            areaId,
-          })),
-        });
-      }
 
       return { success: true };
     }),
@@ -161,9 +153,11 @@ export const userRouter = router({
         userId: z.string(),
         name: z.string().optional(),
         positionId: z.string().optional(),
-        areaIds: z.array(z.string()).optional(),
+        hierarchyLevelId: z.string().optional(),
+        areaId: z.string().optional(),
         isAdmin: z.boolean().optional(),
         status: z.enum(["PENDING", "ACTIVE", "REJECTED", "DISABLED"]).optional(),
+        providerId: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -175,25 +169,247 @@ export const userRouter = router({
         throw new Error("Acesso negado");
       }
 
-      const { userId, areaIds, ...data } = input;
+      const { userId, providerId, ...data } = input;
 
+      // Atualizar dados do usuario
       await prisma.user.update({
         where: { id: userId },
         data,
       });
 
-      if (areaIds) {
-        await prisma.userArea.deleteMany({
+      // Gerenciar vinculo com prestador se providerId foi passado
+      if (providerId !== undefined) {
+        // Primeiro, desvincular qualquer prestador atual deste usuario
+        await prisma.provider.updateMany({
+          where: { userId },
+          data: { userId: null },
+        });
+
+        // Se providerId nao e null, vincular o novo prestador
+        if (providerId) {
+          // Verificar se o prestador existe e nao esta vinculado a outro usuario
+          const provider = await prisma.provider.findUnique({
+            where: { id: providerId },
+          });
+
+          if (!provider) {
+            throw new Error("Prestador nao encontrado");
+          }
+
+          if (provider.userId && provider.userId !== userId) {
+            throw new Error("Prestador ja possui outro usuario vinculado");
+          }
+
+          await prisma.provider.update({
+            where: { id: providerId },
+            data: { userId },
+          });
+
+          // Sincronizar area, cargo e nivel do usuario com o prestador
+          await prisma.user.update({
+            where: { id: userId },
+            data: {
+              areaId: provider.areaId,
+              positionId: provider.positionId,
+              hierarchyLevelId: provider.hierarchyLevelId,
+            },
+          });
+        }
+      } else if (input.areaId || input.positionId || input.hierarchyLevelId) {
+        // Se mudou area/cargo/nivel do usuario e ele tem prestador vinculado, sincronizar
+        const linkedProvider = await prisma.provider.findUnique({
           where: { userId },
         });
 
-        await prisma.userArea.createMany({
-          data: areaIds.map((areaId) => ({
-            userId,
-            areaId,
-          })),
+        if (linkedProvider) {
+          const syncData: { areaId?: string; positionId?: string; hierarchyLevelId?: string } = {};
+          if (input.areaId) syncData.areaId = input.areaId;
+          if (input.positionId) syncData.positionId = input.positionId;
+          if (input.hierarchyLevelId) syncData.hierarchyLevelId = input.hierarchyLevelId;
+
+          if (Object.keys(syncData).length > 0) {
+            await prisma.provider.update({
+              where: { id: linkedProvider.id },
+              data: syncData,
+            });
+          }
+        }
+      }
+
+      return { success: true };
+    }),
+
+  // Criar usuario diretamente (apenas admin)
+  createByAdmin: protectedProcedure
+    .input(
+      z.object({
+        name: z.string().min(2),
+        email: z.string().email(),
+        password: z.string().min(8),
+        positionId: z.string().optional(),
+        hierarchyLevelId: z.string().optional(),
+        areaId: z.string().optional(),
+        isAdmin: z.boolean().default(false),
+        providerId: z.string().optional(),
+        // Campos para criar prestador junto
+        createAsProvider: z.boolean().default(false),
+        providerData: z.object({
+          salary: z.number().positive(),
+          startDate: z.string().or(z.date()),
+          seniority: z.enum(["JUNIOR", "MID", "SENIOR", "LEAD", "PRINCIPAL", "NA"]).default("NA"),
+          ndaStatus: z.enum(["SIGNED", "NOT_SIGNED"]).default("NOT_SIGNED"),
+          contractStatus: z.enum(["SIGNED", "NOT_SIGNED"]).default("NOT_SIGNED"),
+        }).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = await prisma.user.findUnique({
+        where: { id: ctx.session.user.id },
+      });
+
+      if (!currentUser?.isAdmin) {
+        throw new Error("Acesso negado");
+      }
+
+      // Verificar se email ja existe
+      const existingUser = await prisma.user.findUnique({
+        where: { email: input.email },
+      });
+
+      if (existingUser) {
+        throw new Error("Email ja cadastrado");
+      }
+
+      // Se criar como prestador, area e cargo sao obrigatorios
+      if (input.createAsProvider) {
+        if (!input.areaId) {
+          throw new Error("Area e obrigatoria para criar como prestador");
+        }
+        if (!input.positionId) {
+          throw new Error("Cargo e obrigatorio para criar como prestador");
+        }
+        if (!input.providerData) {
+          throw new Error("Dados do prestador sao obrigatorios");
+        }
+      }
+
+      // Se providerId fornecido, verificar se existe e nao tem usuario vinculado
+      if (input.providerId) {
+        const provider = await prisma.provider.findUnique({
+          where: { id: input.providerId },
+        });
+
+        if (!provider) {
+          throw new Error("Prestador nao encontrado");
+        }
+
+        if (provider.userId) {
+          throw new Error("Prestador ja possui usuario vinculado");
+        }
+      }
+
+      // Criar usuario diretamente via Prisma (sem fazer login automatico)
+      const { hashPassword } = await import("better-auth/crypto");
+      const crypto = await import("crypto");
+      const generateId = () => crypto.randomBytes(16).toString("hex");
+      const hashedPassword = await hashPassword(input.password);
+
+      // Criar o usuario
+      const newUser = await prisma.user.create({
+        data: {
+          id: generateId(),
+          name: input.name,
+          email: input.email,
+          emailVerified: true,
+          status: "ACTIVE",
+          positionId: input.positionId,
+          hierarchyLevelId: input.hierarchyLevelId,
+          areaId: input.areaId,
+          isAdmin: input.isAdmin,
+        },
+      });
+
+      // Criar a conta de credencial vinculada ao usuario
+      await prisma.account.create({
+        data: {
+          id: generateId(),
+          userId: newUser.id,
+          accountId: newUser.id,
+          providerId: "credential",
+          password: hashedPassword,
+        },
+      });
+
+      const newUserId = newUser.id;
+
+      // Vincular prestador existente se fornecido
+      if (input.providerId) {
+        await prisma.provider.update({
+          where: { id: input.providerId },
+          data: { userId: newUserId },
         });
       }
+
+      // Criar novo prestador se solicitado
+      if (input.createAsProvider && input.providerData && input.areaId && input.positionId) {
+        await prisma.provider.create({
+          data: {
+            name: input.name,
+            salary: input.providerData.salary,
+            startDate: new Date(input.providerData.startDate),
+            seniority: input.providerData.seniority,
+            ndaStatus: input.providerData.ndaStatus,
+            contractStatus: input.providerData.contractStatus,
+            areaId: input.areaId,
+            positionId: input.positionId,
+            hierarchyLevelId: input.hierarchyLevelId,
+            userId: newUserId,
+          },
+        });
+      }
+
+      return { success: true, userId: newUserId };
+    }),
+
+  // Alterar senha de usuario (apenas admin)
+  setPassword: protectedProcedure
+    .input(
+      z.object({
+        userId: z.string(),
+        newPassword: z.string().min(8),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = await prisma.user.findUnique({
+        where: { id: ctx.session.user.id },
+      });
+
+      if (!currentUser?.isAdmin) {
+        throw new Error("Acesso negado");
+      }
+
+      // Verificar se usuario existe
+      const targetUser = await prisma.user.findUnique({
+        where: { id: input.userId },
+      });
+
+      if (!targetUser) {
+        throw new Error("Usuario nao encontrado");
+      }
+
+      // Alterar senha diretamente na tabela account
+      const { hashPassword } = await import("better-auth/crypto");
+      const hashedPassword = await hashPassword(input.newPassword);
+
+      await prisma.account.updateMany({
+        where: {
+          userId: input.userId,
+          providerId: "credential",
+        },
+        data: {
+          password: hashedPassword,
+        },
+      });
 
       return { success: true };
     }),
@@ -203,76 +419,79 @@ export const userRouter = router({
     const user = await prisma.user.findUnique({
       where: { id: ctx.session.user.id },
       include: {
-        position: true,
-        areas: true,
+        hierarchyLevel: true,
+        area: true,
+        directorOfAreas: true,
+        cLevelOfAreas: true,
       },
     });
 
-    if (!user || !user.position) {
+    if (!user) {
       return { recess: 0, termination: 0, hiring: 0, purchase: 0, remuneration: 0, total: 0 };
     }
 
-    const userLevel = user.position.level;
-    const userAreaIds = user.areas.map((a) => a.areaId);
-    const canApproveFlag = user.position.canApprove || user.isAdmin;
+    // Verificar se o usuario e diretor ou C-Level de alguma area
+    const directorOfAreaIds = user.directorOfAreas.map((a) => a.id);
+    const cLevelOfAreaIds = user.cLevelOfAreas.map((a) => a.id);
+    const allResponsibleAreaIds = [...new Set([...directorOfAreaIds, ...cLevelOfAreaIds])];
+    const canApproveFlag = allResponsibleAreaIds.length > 0 || user.isAdmin;
 
     // Se nao pode aprovar, retorna 0
     if (!canApproveFlag) {
       return { recess: 0, termination: 0, hiring: 0, purchase: 0, remuneration: 0, total: 0 };
     }
 
-    // Niveis minimos por role
-    const ROLE_MIN_LEVELS = {
-      AREA_DIRECTOR: 80,
-      HR_DIRECTOR: 90,
-      CFO: 95,
-      CEO: 100,
-    } as const;
-
-    // Buscar todas as etapas pendentes
+    // Buscar todas as etapas pendentes com a area de aprovacao
     const pendingSteps = await prisma.approvalStep.findMany({
       where: { status: "PENDING" },
       include: {
-        recessRequest: { select: { id: true, providerArea: true, status: true } },
-        terminationRequest: { select: { id: true, providerArea: true, status: true } },
-        hiringRequest: { select: { id: true, areaId: true, status: true } },
-        purchaseRequest: { select: { id: true, requesterArea: true, status: true } },
-        remunerationRequest: { select: { id: true, providerArea: true, status: true } },
+        approvalArea: { select: { id: true } },
+        recessRequest: { select: { id: true, status: true } },
+        terminationRequest: { select: { id: true, status: true } },
+        hiringRequest: { select: { id: true, status: true } },
+        purchaseRequest: { select: { id: true, status: true } },
+        remunerationRequest: { select: { id: true, status: true } },
       },
     });
 
-    // Filtrar apenas as que o usuario pode aprovar
-    const counts = { recess: 0, termination: 0, hiring: 0, purchase: 0, remuneration: 0 };
+    // Filtrar apenas as que o usuario pode aprovar e contar solicitacoes unicas
+    const uniqueRequests = {
+      recess: new Set<string>(),
+      termination: new Set<string>(),
+      hiring: new Set<string>(),
+      purchase: new Set<string>(),
+      remuneration: new Set<string>(),
+    };
 
     for (const step of pendingSteps) {
-      const minLevel = ROLE_MIN_LEVELS[step.role as keyof typeof ROLE_MIN_LEVELS];
-      if (!minLevel || userLevel < minLevel) continue;
-
-      // Verificar area para AREA_DIRECTOR
-      if (step.role === "AREA_DIRECTOR") {
-        let requestAreaId: string | undefined;
-        if (step.recessRequest) requestAreaId = step.recessRequest.providerArea;
-        else if (step.terminationRequest) requestAreaId = step.terminationRequest.providerArea;
-        else if (step.hiringRequest) requestAreaId = step.hiringRequest.areaId;
-        else if (step.purchaseRequest) requestAreaId = step.purchaseRequest.requesterArea;
-        else if (step.remunerationRequest) requestAreaId = step.remunerationRequest.providerArea;
-
-        if (requestAreaId && !userAreaIds.includes(requestAreaId)) continue;
+      // Admin pode aprovar tudo
+      if (!user.isAdmin) {
+        // Verificar se o usuario e diretor ou C-Level da area de aprovacao
+        const stepAreaId = step.approvalAreaId;
+        if (!stepAreaId || !allResponsibleAreaIds.includes(stepAreaId)) continue;
       }
 
-      // Contar por tipo
+      // Adicionar ID da solicitacao ao Set (garante contagem unica)
       if (step.recessRequest && step.recessRequest.status === "PENDING") {
-        counts.recess++;
+        uniqueRequests.recess.add(step.recessRequest.id);
       } else if (step.terminationRequest && step.terminationRequest.status === "PENDING") {
-        counts.termination++;
+        uniqueRequests.termination.add(step.terminationRequest.id);
       } else if (step.hiringRequest && step.hiringRequest.status === "PENDING") {
-        counts.hiring++;
+        uniqueRequests.hiring.add(step.hiringRequest.id);
       } else if (step.purchaseRequest && step.purchaseRequest.status === "PENDING") {
-        counts.purchase++;
+        uniqueRequests.purchase.add(step.purchaseRequest.id);
       } else if (step.remunerationRequest && step.remunerationRequest.status === "PENDING") {
-        counts.remuneration++;
+        uniqueRequests.remuneration.add(step.remunerationRequest.id);
       }
     }
+
+    const counts = {
+      recess: uniqueRequests.recess.size,
+      termination: uniqueRequests.termination.size,
+      hiring: uniqueRequests.hiring.size,
+      purchase: uniqueRequests.purchase.size,
+      remuneration: uniqueRequests.remuneration.size,
+    };
 
     return {
       ...counts,

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -169,68 +170,60 @@ export default function NewHiringPage() {
               {/* Área */}
               <div className="space-y-2">
                 <Label htmlFor="area">Área *</Label>
-                <Select
+                <SearchableSelect
+                  options={
+                    areasQuery.data?.map((area) => ({
+                      value: area.id,
+                      label: area.name,
+                    })) || []
+                  }
                   value={formData.areaId}
                   onValueChange={(value) =>
-                    value && setFormData({ ...formData, areaId: value, replacedProviderId: "" })
+                    setFormData({ ...formData, areaId: value, replacedProviderId: "" })
                   }
-                >
-                  <SelectTrigger id="area">
-                    <SelectValue placeholder="Selecione a área" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {areasQuery.data?.map((area) => (
-                      <SelectItem key={area.id} value={area.id}>
-                        {area.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Buscar área..."
+                  emptyMessage="Nenhuma área encontrada."
+                />
               </div>
 
               {/* Cargo */}
               <div className="space-y-2">
                 <Label htmlFor="position">Cargo *</Label>
-                <Select
+                <SearchableSelect
+                  options={
+                    positionsQuery.data?.map((position) => ({
+                      value: position.id,
+                      label: position.name,
+                    })) || []
+                  }
                   value={formData.positionId}
                   onValueChange={(value) =>
-                    value && setFormData({ ...formData, positionId: value })
+                    setFormData({ ...formData, positionId: value })
                   }
-                >
-                  <SelectTrigger id="position">
-                    <SelectValue placeholder="Selecione o cargo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {positionsQuery.data?.map((position) => (
-                      <SelectItem key={position.id} value={position.id}>
-                        {position.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Buscar cargo..."
+                  emptyMessage="Nenhum cargo encontrado."
+                />
               </div>
 
               {/* Prestador Substituído (se for substituição) */}
               {formData.hiringType === "REPLACEMENT" && formData.areaId && (
                 <div className="space-y-2">
                   <Label htmlFor="replaced">Prestador a ser Substituído *</Label>
-                  <Select
+                  <SearchableSelect
+                    options={
+                      providersQuery.data?.map((provider) => ({
+                        value: provider.id,
+                        label: provider.name,
+                        description: provider.position.name,
+                      })) || []
+                    }
                     value={formData.replacedProviderId}
                     onValueChange={(value) =>
-                      value && setFormData({ ...formData, replacedProviderId: value })
+                      setFormData({ ...formData, replacedProviderId: value })
                     }
-                  >
-                    <SelectTrigger id="replaced">
-                      <SelectValue placeholder="Selecione o prestador" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {providersQuery.data?.map((provider) => (
-                        <SelectItem key={provider.id} value={provider.id}>
-                          {provider.name} - {provider.position.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Buscar prestador..."
+                    emptyMessage="Nenhum prestador encontrado."
+                  />
                 </div>
               )}
 

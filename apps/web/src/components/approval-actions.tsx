@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, ShieldAlert, XCircle } from "lucide-react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,6 +29,8 @@ type ApprovalActionsProps = {
   stepRole: string;
   stepNumber: number;
   canApprove: boolean;
+  isAdminOverride?: boolean;
+  potentialApprovers?: Array<{ id: string; name: string }>;
   onApprove: (stepId: string, comment?: string) => Promise<void>;
   onReject: (stepId: string, comment: string) => Promise<void>;
   isLoading?: boolean;
@@ -38,6 +41,8 @@ export function ApprovalActions({
   stepRole,
   stepNumber,
   canApprove,
+  isAdminOverride = false,
+  potentialApprovers = [],
   onApprove,
   onReject,
   isLoading = false,
@@ -82,8 +87,25 @@ export function ApprovalActions({
     );
   }
 
+  const approverNames = potentialApprovers.map((a) => a.name).join(" ou ");
+
   return (
     <>
+      {isAdminOverride && (
+        <Alert className="mb-4 border-amber-200 bg-amber-50">
+          <ShieldAlert className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="text-amber-700">Aprovação como Admin</AlertTitle>
+          <AlertDescription className="text-amber-600">
+            Você está aprovando como administrador, passando por cima do aprovador designado
+            {approverNames && (
+              <>
+                {" "}(<strong>{approverNames}</strong>)
+              </>
+            )}.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex gap-3">
         <Button
           onClick={() => setShowApproveDialog(true)}
@@ -115,6 +137,17 @@ export function ApprovalActions({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {isAdminOverride && (
+              <Alert className="border-amber-200 bg-amber-50">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <AlertTitle className="text-amber-700 text-sm">Aprovação como Admin</AlertTitle>
+                <AlertDescription className="text-amber-600 text-sm">
+                  O aprovador designado para esta etapa é{" "}
+                  <strong>{approverNames || "outro usuário"}</strong>.
+                  Ao aprovar, você está passando por cima do fluxo normal.
+                </AlertDescription>
+              </Alert>
+            )}
             <div>
               <Label htmlFor="approve-comment">Comentário (opcional)</Label>
               <Textarea

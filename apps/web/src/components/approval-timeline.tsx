@@ -12,12 +12,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-// Labels para roles de aprovação
+// Labels para roles de aprovação (DEPRECATED - mantido para compatibilidade)
 const ROLE_LABELS: Record<string, string> = {
   AREA_DIRECTOR: "Diretor da Área",
   HR_DIRECTOR: "Diretor RH",
   CFO: "CFO",
   CEO: "CEO",
+  PARTNER: "Sócio",
 };
 
 type ApprovalStep = {
@@ -32,14 +33,26 @@ type ApprovalStep = {
     id: string;
     name: string;
   } | null;
+  // Novo campo para area de aprovacao
+  approvalArea?: {
+    id: string;
+    name: string;
+  } | null;
+};
+
+type PotentialApprover = {
+  id: string;
+  name: string;
+  email: string;
 };
 
 type ApprovalTimelineProps = {
   steps: ApprovalStep[];
   currentStep?: number;
+  potentialApprovers?: PotentialApprover[];
 };
 
-export function ApprovalTimeline({ steps, currentStep }: ApprovalTimelineProps) {
+export function ApprovalTimeline({ steps, currentStep, potentialApprovers = [] }: ApprovalTimelineProps) {
   const getStepIcon = (status: string, isCurrentStep: boolean) => {
     if (status === "APPROVED") {
       return <CheckCircle2 className="h-6 w-6 text-green-500" />;
@@ -86,7 +99,7 @@ export function ApprovalTimeline({ steps, currentStep }: ApprovalTimelineProps) 
             const nextStep = !isLastStep ? steps[index + 1] : null;
 
             return (
-              <div key={step.id} className="relative flex gap-4">
+              <div key={step.id} className={`relative flex gap-4 ${!isLastStep ? "pb-6" : ""}`}>
                 {/* Linha vertical conectora */}
                 {!isLastStep && (
                   <div
@@ -104,14 +117,14 @@ export function ApprovalTimeline({ steps, currentStep }: ApprovalTimelineProps) 
 
                 {/* Conteúdo */}
                 <div
-                  className={`flex-1 pb-8 ${
-                    isCurrentStep ? "bg-muted/50 -mx-2 px-2 py-2 rounded-xl" : ""
+                  className={`flex-1 ${
+                    isCurrentStep ? "bg-muted/50 -ml-2 pl-2 pr-2 py-2 rounded-xl" : ""
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">
-                        Etapa {step.stepNumber}: {ROLE_LABELS[step.role] || step.role}
+                        Etapa {step.stepNumber}: {step.approvalArea?.name || ROLE_LABELS[step.role] || step.role}
                       </span>
                       {getStepBadge(step.status)}
                     </div>
@@ -121,6 +134,9 @@ export function ApprovalTimeline({ steps, currentStep }: ApprovalTimelineProps) 
                     <div className="mt-2 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <User className="h-3 w-3" />
+                        <span className="font-medium">
+                          {step.status === "APPROVED" ? "Aprovado por:" : "Rejeitado por:"}
+                        </span>
                         <span>{step.approver.name}</span>
                       </div>
                       {step.approvedAt && (
@@ -143,7 +159,13 @@ export function ApprovalTimeline({ steps, currentStep }: ApprovalTimelineProps) 
 
                   {step.status === "PENDING" && isCurrentStep && (
                     <div className="mt-2 text-sm text-yellow-600">
-                      Aguardando aprovação
+                      <div>Aguardando aprovação</div>
+                      {potentialApprovers.length > 0 && (
+                        <div className="mt-1 text-muted-foreground">
+                          <span className="font-medium">Pode aprovar: </span>
+                          {potentialApprovers.map((a) => a.name).join(", ")}
+                        </div>
+                      )}
                     </div>
                   )}
 

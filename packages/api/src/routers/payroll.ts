@@ -79,11 +79,11 @@ export const payrollRouter = router({
       // Verificar permissões (admin ou Dir. RH)
       const currentUser = await prisma.user.findUnique({
         where: { id: ctx.session.user.id },
-        include: { position: true },
+        include: { hierarchyLevel: true },
       });
 
       const isAdmin = currentUser?.isAdmin;
-      const isHRDirector = currentUser?.position?.level === 90;
+      const isHRDirector = currentUser?.hierarchyLevel?.level === 90;
 
       if (!isAdmin && !isHRDirector) {
         throw new Error("Acesso negado. Apenas Admin ou Diretor RH podem editar a folha.");
@@ -177,11 +177,11 @@ export const payrollRouter = router({
       // Verificar permissões (admin ou Dir. RH)
       const currentUser = await prisma.user.findUnique({
         where: { id: ctx.session.user.id },
-        include: { position: true },
+        include: { hierarchyLevel: true },
       });
 
       const isAdmin = currentUser?.isAdmin;
-      const isHRDirector = currentUser?.position?.level === 90;
+      const isHRDirector = currentUser?.hierarchyLevel?.level === 90;
 
       if (!isAdmin && !isHRDirector) {
         throw new Error("Acesso negado. Apenas Admin ou Diretor RH podem definir bônus.");

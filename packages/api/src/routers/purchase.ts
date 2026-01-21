@@ -8,7 +8,8 @@ import {
   approveStep,
   rejectStep,
   getCurrentPendingStep,
-  canUserApproveStep,
+  checkApprovalPermission,
+  getPotentialApprovers,
 } from "../lib/approval-engine";
 
 export const purchaseRouter = router({
@@ -26,11 +27,11 @@ export const purchaseRouter = router({
 
       const currentUser = await prisma.user.findUnique({
         where: { id: ctx.session.user.id },
-        include: { position: true, areas: true },
+        include: { hierarchyLevel: true, area: true },
       });
 
       const isAdmin = currentUser?.isAdmin;
-      const isDirector = (currentUser?.position?.level || 0) >= 80;
+      const isDirector = (currentUser?.hierarchyLevel?.level || 0) >= 80;
 
       // Filtros base
       const where: any = {};
@@ -55,6 +56,9 @@ export const purchaseRouter = router({
             orderBy: { stepNumber: "asc" },
             include: {
               approver: {
+                select: { id: true, name: true },
+              },
+              approvalArea: {
                 select: { id: true, name: true },
               },
             },
@@ -94,6 +98,9 @@ export const purchaseRouter = router({
               approver: {
                 select: { id: true, name: true },
               },
+              approvalArea: {
+                select: { id: true, name: true },
+              },
             },
           },
         },
@@ -128,17 +135,15 @@ export const purchaseRouter = router({
         where: { id: ctx.session.user.id },
         include: {
           position: true,
-          areas: {
-            include: { area: true },
-          },
+          area: true,
         },
       });
 
       if (!creator) throw new Error("Usuário não encontrado");
 
-      const requesterArea = creator.areas[0]?.area.name || "Sem área";
+      const requesterArea = creator.area?.name || "Sem área";
       const requesterPosition = creator.position?.name || "Sem cargo";
-      const requesterAreaId = creator.areas[0]?.areaId;
+      const requesterAreaId = creator.areaId || undefined;
 
       // Criar solicitação
       const request = await prisma.purchaseRequest.create({
@@ -208,23 +213,36 @@ export const purchaseRouter = router({
       const currentStep = await getCurrentPendingStep("PURCHASE", input.requestId);
 
       if (!currentStep) {
-        return { canApprove: false, step: null };
+        return { canApprove: false, isAdminOverride: false, step: null, potentialApprovers: [] };
       }
 
       const request = await prisma.purchaseRequest.findUnique({
         where: { id: input.requestId },
-        include: { creator: { include: { areas: true } } },
+        include: { creator: { include: { area: true } } },
       });
 
-      const requestAreaId = request?.creator.areas[0]?.areaId;
+      const requestAreaId = request?.creator.areaId || undefined;
 
-      const canApprove = await canUserApproveStep(
+      const permission = await checkApprovalPermission(
         ctx.session.user.id,
         currentStep.role,
-        requestAreaId
+        requestAreaId,
+        currentStep.approvalAreaId || undefined
       );
 
-      return { canApprove, step: currentStep };
+      // Buscar aprovadores potenciais para a etapa atual
+      const potentialApprovers = await getPotentialApprovers(
+        currentStep.role,
+        requestAreaId,
+        currentStep.approvalAreaId || undefined
+      );
+
+      return {
+        canApprove: permission.canApprove,
+        isAdminOverride: permission.isAdminOverride,
+        step: currentStep,
+        potentialApprovers,
+      };
     }),
 
   // Obter dados do usuário atual para pré-preencher formulário
@@ -233,9 +251,7 @@ export const purchaseRouter = router({
       where: { id: ctx.session.user.id },
       include: {
         position: true,
-        areas: {
-          include: { area: true },
-        },
+        area: true,
       },
     });
 
@@ -243,7 +259,7 @@ export const purchaseRouter = router({
 
     return {
       name: user.name,
-      area: user.areas[0]?.area.name || "Sem área",
+      area: user.area?.name || "Sem área",
       position: user.position?.name || "Sem cargo",
     };
   }),

@@ -214,32 +214,34 @@ export default function PerfilPage() {
                     <span className="text-muted-foreground italic">Não atribuído</span>
                   )}
                 </p>
-                {user?.position && (
+              </div>
+
+              <div className="pt-3 border-t">
+                <p className="text-sm text-muted-foreground">Nivel Hierarquico</p>
+                <p className="font-medium">
+                  {user?.hierarchyLevel?.name || (
+                    <span className="text-muted-foreground italic">Não atribuído</span>
+                  )}
+                </p>
+                {user?.hierarchyLevel && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Nível hierárquico: {user.position.level}
+                    Nivel {user.hierarchyLevel.level}
                   </p>
                 )}
               </div>
 
               <div className="pt-3 border-t">
-                <p className="text-sm text-muted-foreground mb-2">Áreas Vinculadas</p>
-                {user?.areas && user.areas.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {user.areas.map((area) => (
-                      <span
-                        key={area.id}
-                        className="inline-flex items-center rounded-full bg-secondary px-3 py-1 text-sm font-medium"
-                      >
-                        {area.name}
-                      </span>
-                    ))}
-                  </div>
+                <p className="text-sm text-muted-foreground mb-2">Área</p>
+                {user?.area ? (
+                  <span className="inline-flex items-center rounded-full bg-secondary px-3 py-1 text-sm font-medium">
+                    {user.area.name}
+                  </span>
                 ) : (
                   <p className="text-muted-foreground italic">Nenhuma área vinculada</p>
                 )}
               </div>
 
-              {user?.position?.canApprove && (
+              {user?.hierarchyLevel?.canApprove && (
                 <div className="pt-3 border-t">
                   <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
                     <Shield className="h-4 w-4" />

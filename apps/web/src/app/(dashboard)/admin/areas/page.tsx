@@ -1,7 +1,20 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit, Home, Loader2, MoreHorizontal, Plus, Search, Trash2, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  Crown,
+  Edit,
+  Home,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Shield,
+  Star,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -30,6 +43,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -38,9 +58,22 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+type RolePerson = {
+  id: string;
+  name: string;
+  email: string;
+  hierarchyLevel: { name: string; level: number } | null;
+};
+
 type Area = {
   id: string;
   name: string;
+  cLevelId: string | null;
+  cLevel: RolePerson | null;
+  directorId: string | null;
+  director: RolePerson | null;
+  leaderId: string | null;
+  leader: RolePerson | null;
   userCount: number;
   providerCount: number;
   createdAt: string | Date;
@@ -54,9 +87,19 @@ export default function AdminAreasPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedArea, setSelectedArea] = useState<Area | null>(null);
   const [formName, setFormName] = useState("");
+  const [formCLevelId, setFormCLevelId] = useState<string | null>(null);
+  const [formDirectorId, setFormDirectorId] = useState<string | null>(null);
+  const [formLeaderId, setFormLeaderId] = useState<string | null>(null);
 
   // Queries
   const areasQuery = useQuery(trpc.area.list.queryOptions());
+  const usersQuery = useQuery(trpc.user.list.queryOptions());
+
+  // Todos os usuarios ativos podem ser selecionados para os cargos
+  // Admin pode ver o nivel e decidir quem atribuir
+  const activeUsers = usersQuery.data
+    ?.filter((u) => u.status === "ACTIVE")
+    .sort((a, b) => (b.hierarchyLevel?.level || 0) - (a.hierarchyLevel?.level || 0)) || [];
 
   // Mutations
   const createMutation = useMutation(
@@ -118,7 +161,13 @@ export default function AdminAreasPage() {
 
   const handleUpdate = () => {
     if (!selectedArea || !formName.trim()) return;
-    updateMutation.mutate({ id: selectedArea.id, name: formName.trim() });
+    updateMutation.mutate({
+      id: selectedArea.id,
+      name: formName.trim(),
+      cLevelId: formCLevelId,
+      directorId: formDirectorId,
+      leaderId: formLeaderId,
+    });
   };
 
   const handleDelete = () => {
@@ -129,6 +178,9 @@ export default function AdminAreasPage() {
   const openEditDialog = (area: Area) => {
     setSelectedArea(area);
     setFormName(area.name);
+    setFormCLevelId(area.cLevelId);
+    setFormDirectorId(area.directorId);
+    setFormLeaderId(area.leaderId);
     setIsEditDialogOpen(true);
   };
 
@@ -152,8 +204,36 @@ export default function AdminAreasPage() {
         </Button>
       </div>
 
+      {/* Alert for areas without director */}
+      {areasQuery.data && areasQuery.data.filter((a) => !a.director).length > 0 && (
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-amber-800 dark:text-amber-400">
+              <AlertTriangle className="h-5 w-5" />
+              Configuracao Pendente
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              As seguintes areas nao possuem diretor configurado. Solicitacoes dessas areas nao poderao ser aprovadas:
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {areasQuery.data.filter((a) => !a.director).map((area) => (
+                <Badge
+                  key={area.id}
+                  variant="outline"
+                  className="border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                >
+                  {area.name}
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Areas</CardTitle>
@@ -161,6 +241,17 @@ export default function AdminAreasPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{areasQuery.data?.length || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Areas sem Diretor</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-amber-600">
+              {areasQuery.data?.filter((a) => !a.director).length || 0}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -231,6 +322,9 @@ export default function AdminAreasPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
+                    <TableHead>C-Level</TableHead>
+                    <TableHead>Diretor</TableHead>
+                    <TableHead>Lider</TableHead>
                     <TableHead className="text-center">Usuarios</TableHead>
                     <TableHead className="text-center">Prestadores</TableHead>
                     <TableHead className="w-[70px]"></TableHead>
@@ -246,6 +340,54 @@ export default function AdminAreasPage() {
                           </div>
                           {area.name}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {area.cLevel ? (
+                          <div className="flex items-center gap-2">
+                            <Crown className="h-4 w-4 text-purple-600" />
+                            <div>
+                              <p className="text-sm font-medium">{area.cLevel.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {area.cLevel.hierarchyLevel?.name || "N/A"}
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {area.director ? (
+                          <div className="flex items-center gap-2">
+                            <Shield className="h-4 w-4 text-blue-600" />
+                            <div>
+                              <p className="text-sm font-medium">{area.director.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {area.director.hierarchyLevel?.name || "N/A"}
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-amber-600">
+                            <AlertTriangle className="h-4 w-4" />
+                            <span className="text-sm">Pendente</span>
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {area.leader ? (
+                          <div className="flex items-center gap-2">
+                            <Star className="h-4 w-4 text-emerald-600" />
+                            <div>
+                              <p className="text-sm font-medium">{area.leader.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {area.leader.hierarchyLevel?.name || "N/A"}
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge variant="secondary">{area.userCount}</Badge>
@@ -319,11 +461,11 @@ export default function AdminAreasPage() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Editar Area</DialogTitle>
             <DialogDescription>
-              Atualize o nome da area.
+              Atualize o nome e os responsaveis da area.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -334,8 +476,109 @@ export default function AdminAreasPage() {
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
                 placeholder="Ex: Tecnologia, Marketing, RH..."
-                onKeyDown={(e) => e.key === "Enter" && handleUpdate()}
               />
+            </div>
+
+            {/* C-Level */}
+            <div className="grid gap-2">
+              <Label className="flex items-center gap-2">
+                <Crown className="h-4 w-4 text-purple-600" />
+                C-Level
+              </Label>
+              <Select
+                value={formCLevelId || "none"}
+                onValueChange={(value) => setFormCLevelId(value === "none" ? null : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    <span className="text-muted-foreground">Nenhum</span>
+                  </SelectItem>
+                  {activeUsers.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{user.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {user.hierarchyLevel?.name || user.position?.name || "Sem nivel"}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Executivo responsavel pela visao estrategica da area.
+              </p>
+            </div>
+
+            {/* Diretor */}
+            <div className="grid gap-2">
+              <Label className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-blue-600" />
+                Diretor
+              </Label>
+              <Select
+                value={formDirectorId || "none"}
+                onValueChange={(value) => setFormDirectorId(value === "none" ? null : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    <span className="text-muted-foreground">Nenhum</span>
+                  </SelectItem>
+                  {activeUsers.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{user.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {user.hierarchyLevel?.name || user.position?.name || "Sem nivel"}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Responsavel por aprovar solicitacoes da 1a etapa. <span className="text-amber-600 font-medium">Obrigatorio para aprovacoes.</span>
+              </p>
+            </div>
+
+            {/* Lider */}
+            <div className="grid gap-2">
+              <Label className="flex items-center gap-2">
+                <Star className="h-4 w-4 text-emerald-600" />
+                Lider
+              </Label>
+              <Select
+                value={formLeaderId || "none"}
+                onValueChange={(value) => setFormLeaderId(value === "none" ? null : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    <span className="text-muted-foreground">Nenhum</span>
+                  </SelectItem>
+                  {activeUsers.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{user.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {user.hierarchyLevel?.name || user.position?.name || "Sem nivel"}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Pode abrir solicitacoes em nome da area.
+              </p>
             </div>
           </div>
           <DialogFooter>

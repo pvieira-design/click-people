@@ -9,8 +9,10 @@ import {
   DollarSign,
   FileText,
   Home,
+  Layers,
   LayoutDashboard,
   LogOut,
+  Network,
   Settings,
   ShieldCheck,
   UserMinus,
@@ -89,6 +91,11 @@ const payrollNavItems = [
 
 const adminNavItems = [
   {
+    title: "Organograma",
+    href: "/admin/organograma",
+    icon: Network,
+  },
+  {
     title: "Usuarios",
     href: "/admin/usuarios",
     icon: Users,
@@ -107,6 +114,11 @@ const adminNavItems = [
     title: "Cargos",
     href: "/admin/cargos",
     icon: ShieldCheck,
+  },
+  {
+    title: "Senioridades",
+    href: "/admin/niveis",
+    icon: Layers,
   },
   {
     title: "Configuracoes",

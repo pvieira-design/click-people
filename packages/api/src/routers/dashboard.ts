@@ -223,7 +223,10 @@ export const dashboardRouter = router({
       where: { id: ctx.session.user.id },
       include: {
         position: true,
-        areas: { include: { area: true } },
+        hierarchyLevel: true,
+        area: true,
+        directorOfAreas: true,
+        cLevelOfAreas: true,
       },
     });
 
@@ -231,13 +234,17 @@ export const dashboardRouter = router({
       throw new Error("Usuario nao encontrado");
     }
 
-    const userLevel = currentUser.position?.level || 0;
-    const userAreaIds = currentUser.areas.map((ua) => ua.areaId);
-    const canApprove = currentUser.position?.canApprove || false;
+    const userLevel = currentUser.hierarchyLevel?.level || 0;
+    const userAreaId = currentUser.areaId;
     const isAdmin = currentUser.isAdmin;
-    const isDirector = userLevel >= 80;
-    const isHRDirector = userLevel >= 90;
-    const isCLevel = userLevel >= 95; // CFO ou CEO
+    // Verificar se o usuario e diretor ou C-Level de alguma area
+    const directorOfAreaIds = currentUser.directorOfAreas.map((a) => a.id);
+    const cLevelOfAreaIds = currentUser.cLevelOfAreas.map((a) => a.id);
+    const allResponsibleAreaIds = [...new Set([...directorOfAreaIds, ...cLevelOfAreaIds])];
+    const canApprove = allResponsibleAreaIds.length > 0 || isAdmin;
+    const isDirector = allResponsibleAreaIds.length > 0;
+    const isHRDirector = userLevel >= 90 || allResponsibleAreaIds.length > 0;
+    const isCLevel = userLevel >= 95 || cLevelOfAreaIds.length > 0;
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -255,40 +262,25 @@ export const dashboardRouter = router({
     let pendingCounts = { recess: 0, termination: 0, hiring: 0, purchase: 0, remuneration: 0 };
 
     if (canApprove || isAdmin) {
-      // Niveis minimos por role
-      const ROLE_MIN_LEVELS = {
-        AREA_DIRECTOR: 80,
-        HR_DIRECTOR: 90,
-        CFO: 95,
-        CEO: 100,
-      } as const;
-
-      // Buscar todas as etapas pendentes
+      // Buscar todas as etapas pendentes com a area de aprovacao
       const pendingSteps = await prisma.approvalStep.findMany({
         where: { status: "PENDING" },
         include: {
-          recessRequest: { select: { id: true, providerArea: true, status: true } },
-          terminationRequest: { select: { id: true, providerArea: true, status: true } },
-          hiringRequest: { select: { id: true, areaId: true, status: true } },
-          purchaseRequest: { select: { id: true, requesterArea: true, status: true } },
-          remunerationRequest: { select: { id: true, providerArea: true, status: true } },
+          approvalArea: { select: { id: true } },
+          recessRequest: { select: { id: true, status: true } },
+          terminationRequest: { select: { id: true, status: true } },
+          hiringRequest: { select: { id: true, status: true } },
+          purchaseRequest: { select: { id: true, status: true } },
+          remunerationRequest: { select: { id: true, status: true } },
         },
       });
 
       for (const step of pendingSteps) {
-        const minLevel = ROLE_MIN_LEVELS[step.role as keyof typeof ROLE_MIN_LEVELS];
-        if (!minLevel || userLevel < minLevel) continue;
-
-        // Verificar area para AREA_DIRECTOR
-        if (step.role === "AREA_DIRECTOR" && !isAdmin) {
-          let requestAreaId: string | undefined;
-          if (step.recessRequest) requestAreaId = step.recessRequest.providerArea;
-          else if (step.terminationRequest) requestAreaId = step.terminationRequest.providerArea;
-          else if (step.hiringRequest) requestAreaId = step.hiringRequest.areaId;
-          else if (step.purchaseRequest) requestAreaId = step.purchaseRequest.requesterArea;
-          else if (step.remunerationRequest) requestAreaId = step.remunerationRequest.providerArea;
-
-          if (requestAreaId && !userAreaIds.includes(requestAreaId)) continue;
+        // Admin pode aprovar tudo
+        if (!isAdmin) {
+          // Verificar se o usuario e diretor ou C-Level da area de aprovacao
+          const stepAreaId = step.approvalAreaId;
+          if (!stepAreaId || !allResponsibleAreaIds.includes(stepAreaId)) continue;
         }
 
         // Contar por tipo
@@ -368,6 +360,7 @@ export const dashboardRouter = router({
         HR_DIRECTOR: "Dir. RH",
         CFO: "CFO",
         CEO: "CEO",
+        PARTNER: "Socio",
       };
 
       myRequests = [
@@ -435,8 +428,8 @@ export const dashboardRouter = router({
       upcomingRecess: Array<{ name: string; startDate: Date; endDate: Date }>;
     }> = [];
 
-    if (userAreaIds.length > 0 || isCLevel || isAdmin) {
-      const areasToFetch = isCLevel || isAdmin ? undefined : userAreaIds;
+    if (userAreaId || isCLevel || isAdmin) {
+      const areasToFetch = isCLevel || isAdmin ? undefined : (userAreaId ? [userAreaId] : undefined);
 
       const areas = await prisma.area.findMany({
         where: areasToFetch ? { id: { in: areasToFetch } } : undefined,
@@ -593,6 +586,154 @@ export const dashboardRouter = router({
       hiringInProgress,
       monthlyStats,
     };
+  }),
+
+  // Organograma Kanban - todas as áreas com usuários/prestadores por nível
+  getOrgChart: protectedProcedure.query(async ({ ctx }) => {
+    const currentUser = await prisma.user.findUnique({
+      where: { id: ctx.session.user.id },
+    });
+
+    if (!currentUser?.isAdmin) {
+      throw new Error("Acesso negado. Apenas administradores.");
+    }
+
+    // Buscar todas as áreas com responsáveis, usuários e prestadores
+    const areas = await prisma.area.findMany({
+      orderBy: { name: "asc" },
+      include: {
+        cLevel: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            hierarchyLevel: { select: { name: true, level: true } },
+            position: { select: { name: true } },
+          },
+        },
+        director: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            hierarchyLevel: { select: { name: true, level: true } },
+            position: { select: { name: true } },
+          },
+        },
+        leader: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            hierarchyLevel: { select: { name: true, level: true } },
+            position: { select: { name: true } },
+          },
+        },
+        users: {
+          where: { status: "ACTIVE" },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            hierarchyLevel: { select: { name: true, level: true } },
+            position: { select: { name: true } },
+          },
+          orderBy: { hierarchyLevel: { level: "desc" } },
+        },
+        providers: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            seniority: true,
+            position: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    // Organizar por faixas hierárquicas
+    return areas.map((area) => {
+      // Separar usuários por faixa de nível
+      const cLevel = area.users.filter((u) => (u.hierarchyLevel?.level || 0) >= 90);
+      const directors = area.users.filter((u) => {
+        const level = u.hierarchyLevel?.level || 0;
+        return level >= 80 && level < 90;
+      });
+      const managers = area.users.filter((u) => {
+        const level = u.hierarchyLevel?.level || 0;
+        return level >= 40 && level < 80; // Coordenador, Gerente, Head
+      });
+      const others = area.users.filter((u) => {
+        const level = u.hierarchyLevel?.level || 0;
+        return level < 40;
+      });
+
+      return {
+        id: area.id,
+        name: area.name,
+        // Responsáveis designados da área
+        designatedCLevel: area.cLevel,
+        designatedDirector: area.director,
+        designatedLeader: area.leader,
+        hasDirector: !!area.director,
+        hasCLevel: !!area.cLevel,
+        hasLeader: !!area.leader,
+        // Usuários por faixa hierárquica (que pertencem a esta área)
+        cLevelUsers: cLevel.map((u) => ({
+          id: u.id,
+          name: u.name,
+          level: u.hierarchyLevel?.name || "N/A",
+          position: u.position?.name || "N/A",
+        })),
+        directors: directors.map((u) => ({
+          id: u.id,
+          name: u.name,
+          level: u.hierarchyLevel?.name || "N/A",
+          position: u.position?.name || "N/A",
+        })),
+        managers: managers.map((u) => ({
+          id: u.id,
+          name: u.name,
+          level: u.hierarchyLevel?.name || "N/A",
+          position: u.position?.name || "N/A",
+        })),
+        team: others.map((u) => ({
+          id: u.id,
+          name: u.name,
+          level: u.hierarchyLevel?.name || "N/A",
+          position: u.position?.name || "N/A",
+        })),
+        providers: area.providers.map((p) => ({
+          id: p.id,
+          name: p.name,
+          seniority: p.seniority,
+          position: p.position?.name || "N/A",
+        })),
+        stats: {
+          totalUsers: area.users.length,
+          totalProviders: area.providers.length,
+        },
+      };
+    });
+  }),
+
+  // Listar áreas sem diretor configurado (para alertas)
+  getAreasWithoutDirector: protectedProcedure.query(async ({ ctx }) => {
+    const currentUser = await prisma.user.findUnique({
+      where: { id: ctx.session.user.id },
+    });
+
+    if (!currentUser?.isAdmin) {
+      throw new Error("Acesso negado");
+    }
+
+    const areas = await prisma.area.findMany({
+      where: { directorId: null },
+      orderBy: { name: "asc" },
+    });
+
+    return areas;
   }),
 
   // Listar usuarios pendentes (para admin dashboard)

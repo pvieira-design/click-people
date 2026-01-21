@@ -409,6 +409,7 @@ export default function HiringDetailPage() {
           <ApprovalTimeline
             steps={request.approvalSteps}
             currentStep={request.currentStep}
+            potentialApprovers={canApproveQuery.data?.potentialApprovers}
           />
 
           {request.status === "PENDING" && currentStep && (
@@ -425,6 +426,8 @@ export default function HiringDetailPage() {
                   stepRole={currentStep.role}
                   stepNumber={currentStep.stepNumber}
                   canApprove={canApproveQuery.data?.canApprove || false}
+                  isAdminOverride={canApproveQuery.data?.isAdminOverride || false}
+                  potentialApprovers={canApproveQuery.data?.potentialApprovers}
                   onApprove={handleApprove}
                   onReject={handleReject}
                   isLoading={approveMutation.isPending || rejectMutation.isPending}

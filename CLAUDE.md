@@ -91,9 +91,9 @@ CORS_ORIGIN=http://localhost:3001
 | Model | Descricao |
 |-------|-----------|
 | `User` | Usuarios do sistema (status: PENDING/ACTIVE/REJECTED/DISABLED) |
-| `Position` | Cargos (10=Analista, 50=Gerente, 70=Head, 80=Diretor, 90=Dir.RH, 95=CFO, 100=CEO) |
-| `Area` | 12 areas da empresa |
-| `UserArea` | Relacao N:N entre usuarios e areas |
+| `Position` | Cargos/Funcoes (o que a pessoa faz - sem hierarquia) |
+| `HierarchyLevel` | Niveis hierarquicos para aprovacao (nivel numerico + canApprove) |
+| `Area` | 13 areas da empresa |
 | `Provider` | Prestadores de servico |
 | `RecessRequest` | Solicitacoes de recesso/ferias |
 | `TerminationRequest` | Solicitacoes de desligamento |
@@ -105,13 +105,32 @@ CORS_ORIGIN=http://localhost:3001
 | `AuditLog` | Logs de auditoria |
 | `SystemConfig` | Configuracoes do sistema (chave/valor JSON) |
 
+### Niveis Hierarquicos (HierarchyLevel)
+
+Niveis simplificados - o cargo (Position) define a funcao especifica (CFO, CEO, etc.)
+
+| Nivel | Nome | Pode Aprovar |
+|-------|------|--------------|
+| 10 | Junior | Nao |
+| 20 | Pleno | Nao |
+| 30 | Senior | Nao |
+| 35 | Especialista | Nao |
+| 40 | Coordenador | Nao |
+| 50 | Gerente | Nao |
+| 70 | Head | Nao |
+| 80 | Diretoria | Sim |
+| 90 | C-level | Sim |
+| 105 | Vice Presidente | Sim |
+| 110 | Socio | Sim |
+
 ## tRPC Routers
 
 | Router | Arquivo | Descricao |
 |--------|---------|-----------|
 | `user` | `packages/api/src/routers/user.ts` | Gestao de usuarios (CRUD, aprovar, rejeitar) |
 | `area` | `packages/api/src/routers/area.ts` | CRUD de areas |
-| `position` | `packages/api/src/routers/position.ts` | CRUD de cargos |
+| `position` | `packages/api/src/routers/position.ts` | CRUD de cargos/funcoes |
+| `hierarchyLevel` | `packages/api/src/routers/hierarchyLevel.ts` | CRUD de niveis hierarquicos |
 | `provider` | `packages/api/src/routers/provider.ts` | CRUD de prestadores |
 | `recess` | `packages/api/src/routers/recess.ts` | Solicitacoes de recesso/ferias |
 | `termination` | `packages/api/src/routers/termination.ts` | Solicitacoes de desligamento |
@@ -120,21 +139,36 @@ CORS_ORIGIN=http://localhost:3001
 | `remuneration` | `packages/api/src/routers/remuneration.ts` | Solicitacoes de mudanca de remuneracao |
 | `payroll` | `packages/api/src/routers/payroll.ts` | Folha e Bonus |
 | `audit` | `packages/api/src/routers/audit.ts` | Logs de auditoria |
+| `dashboard` | `packages/api/src/routers/dashboard.ts` | Estatisticas do dashboard |
+| `systemConfig` | `packages/api/src/routers/systemConfig.ts` | Configuracao de fluxos de aprovacao |
 
 ## Fluxos de Aprovacao
 
+Os fluxos de aprovacao sao **CONFIGURAVEIS** via Admin > Configuracoes.
+
+### Etapas Padrao
+
 | Modulo | Etapas |
 |--------|--------|
-| Recesso | Dir. Area -> Dir. RH -> CEO |
-| Desligamento | Dir. Area -> Dir. RH -> CEO |
-| Contratacao | Dir. Area -> Dir. RH -> CFO -> CEO |
-| Compra | Dir. Area -> CFO |
-| Remuneracao | Dir. Area -> Dir. RH -> CFO -> CEO |
+| Recesso | Area da Solicitacao -> RH -> Socio |
+| Desligamento | Area da Solicitacao -> RH -> Socio |
+| Contratacao | Area da Solicitacao -> RH -> Financeiro -> Socio |
+| Compra | Area da Solicitacao -> Financeiro |
+| Remuneracao | Area da Solicitacao -> RH -> Financeiro -> Socio |
 
-### Regras de Auto-Aprovacao
+### Regras dos Fluxos
 
-- **Diretor da propria area:** Pula etapa do Dir. Area
-- **CFO em compras:** Aprovacao total automatica
+1. **Primeira etapa fixa:** Sempre e REQUEST_AREA (area da solicitacao)
+2. **Aprovacao manual obrigatoria:** Todas as etapas requerem aprovacao manual, nao existe auto-aprovacao
+3. **Admin Override:** Quando um admin aprova uma etapa no lugar do aprovador designado, o sistema exibe um aviso visual
+4. **Configuracao via UI:** Admin pode adicionar/remover/reordenar areas em cada fluxo via interface drag-and-drop
+
+### Estrutura Position vs HierarchyLevel
+
+- **Position (Cargo):** O que a pessoa faz (Dev Frontend, Analista, etc.)
+- **HierarchyLevel (Nivel):** Senioridade para aprovacoes (Junior, Pleno, Diretor, etc.)
+
+Um usuario tem ambos: `positionId` (funcao) + `hierarchyLevelId` (nivel para aprovacoes).
 
 ## Padroes de Codigo
 
@@ -163,6 +197,7 @@ CORS_ORIGIN=http://localhost:3001
 - `HR_DIRECTOR` - Diretor de RH
 - `CFO` - Diretor Financeiro
 - `CEO` - Chief Executive Officer
+- `PARTNER` - Socio (aprovacao final)
 
 ### BonusTier
 - `NONE` - 0%
@@ -186,8 +221,10 @@ Ver `docs/REGRAS_NEGOCIO.md` para documentacao completa das regras de negocio.
 ## Arquivos Importantes
 
 - `packages/api/src/lib/approval-engine.ts` - Engine de aprovacao
+- `packages/api/src/routers/systemConfig.ts` - Router para configuracao de fluxos
 - `packages/db/prisma/schema/` - Schema Prisma dividido em arquivos
 - `apps/web/src/components/approval-timeline.tsx` - Componente de timeline de aprovacoes
+- `apps/web/src/components/approval-flow-editor.tsx` - Editor drag-and-drop de fluxos de aprovacao
 - `scripts/prod-db.sh` - Script para comandos no banco de producao
 - `vercel.json` - Configuracao do deploy Vercel
 

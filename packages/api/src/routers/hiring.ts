@@ -8,7 +8,8 @@ import {
   approveStep,
   rejectStep,
   getCurrentPendingStep,
-  canUserApproveStep,
+  checkApprovalPermission,
+  getPotentialApprovers,
 } from "../lib/approval-engine";
 
 export const hiringRouter = router({
@@ -27,11 +28,11 @@ export const hiringRouter = router({
 
       const currentUser = await prisma.user.findUnique({
         where: { id: ctx.session.user.id },
-        include: { position: true, areas: true },
+        include: { hierarchyLevel: true, area: true },
       });
 
       const isAdmin = currentUser?.isAdmin;
-      const isDirector = (currentUser?.position?.level || 0) >= 80;
+      const isDirector = (currentUser?.hierarchyLevel?.level || 0) >= 80;
 
       // Filtros base
       const where: any = {};
@@ -63,6 +64,9 @@ export const hiringRouter = router({
             orderBy: { stepNumber: "asc" },
             include: {
               approver: {
+                select: { id: true, name: true },
+              },
+              approvalArea: {
                 select: { id: true, name: true },
               },
             },
@@ -109,6 +113,9 @@ export const hiringRouter = router({
             orderBy: { stepNumber: "asc" },
             include: {
               approver: {
+                select: { id: true, name: true },
+              },
+              approvalArea: {
                 select: { id: true, name: true },
               },
             },
@@ -239,20 +246,33 @@ export const hiringRouter = router({
       const currentStep = await getCurrentPendingStep("HIRING", input.requestId);
 
       if (!currentStep) {
-        return { canApprove: false, step: null };
+        return { canApprove: false, isAdminOverride: false, step: null, potentialApprovers: [] };
       }
 
       const request = await prisma.hiringRequest.findUnique({
         where: { id: input.requestId },
       });
 
-      const canApprove = await canUserApproveStep(
+      const permission = await checkApprovalPermission(
         ctx.session.user.id,
         currentStep.role,
-        request?.areaId
+        request?.areaId,
+        currentStep.approvalAreaId || undefined
       );
 
-      return { canApprove, step: currentStep };
+      // Buscar aprovadores potenciais para a etapa atual
+      const potentialApprovers = await getPotentialApprovers(
+        currentStep.role,
+        request?.areaId,
+        currentStep.approvalAreaId || undefined
+      );
+
+      return {
+        canApprove: permission.canApprove,
+        isAdminOverride: permission.isAdminOverride,
+        step: currentStep,
+        potentialApprovers,
+      };
     }),
 
   // Atualizar status de contratação (WAITING → IN_PROGRESS → HIRED)
@@ -271,11 +291,11 @@ export const hiringRouter = router({
       // Verificar permissão (admin ou RH)
       const currentUser = await prisma.user.findUnique({
         where: { id: ctx.session.user.id },
-        include: { position: true },
+        include: { hierarchyLevel: true },
       });
 
       const isAdmin = currentUser?.isAdmin;
-      const isHRDirector = currentUser?.position?.level === 90;
+      const isHRDirector = currentUser?.hierarchyLevel?.level === 90;
 
       if (!isAdmin && !isHRDirector) {
         throw new Error("Acesso negado. Apenas Admin ou Diretor RH podem atualizar status de contratação.");
@@ -333,7 +353,7 @@ export const hiringRouter = router({
   listPositions: protectedProcedure.query(async () => {
     return prisma.position.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true, level: true },
+      select: { id: true, name: true },
     });
   }),
 

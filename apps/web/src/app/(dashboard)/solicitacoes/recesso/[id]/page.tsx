@@ -228,6 +228,7 @@ export default function RecessDetailPage() {
           <ApprovalTimeline
             steps={request.approvalSteps}
             currentStep={request.currentStep}
+            potentialApprovers={canApproveQuery.data?.potentialApprovers}
           />
 
           {/* Ações de Aprovação */}
@@ -245,6 +246,8 @@ export default function RecessDetailPage() {
                   stepRole={currentStep.role}
                   stepNumber={currentStep.stepNumber}
                   canApprove={canApproveQuery.data?.canApprove || false}
+                  isAdminOverride={canApproveQuery.data?.isAdminOverride || false}
+                  potentialApprovers={canApproveQuery.data?.potentialApprovers}
                   onApprove={handleApprove}
                   onReject={handleReject}
                   isLoading={approveMutation.isPending || rejectMutation.isPending}

@@ -8,9 +8,8 @@ import {
   approveStep,
   rejectStep,
   getCurrentPendingStep,
-  getApprovalSteps,
-  canUserApproveStep,
-  APPROVAL_FLOWS,
+  checkApprovalPermission,
+  getPotentialApprovers,
 } from "../lib/approval-engine";
 
 export const recessRouter = router({
@@ -29,11 +28,11 @@ export const recessRouter = router({
 
       const currentUser = await prisma.user.findUnique({
         where: { id: ctx.session.user.id },
-        include: { position: true, areas: true },
+        include: { hierarchyLevel: true, area: true },
       });
 
       const isAdmin = currentUser?.isAdmin;
-      const isDirector = (currentUser?.position?.level || 0) >= 80;
+      const isDirector = (currentUser?.hierarchyLevel?.level || 0) >= 80;
 
       // Filtros base
       const where: any = {};
@@ -65,6 +64,9 @@ export const recessRouter = router({
             orderBy: { stepNumber: "asc" },
             include: {
               approver: {
+                select: { id: true, name: true },
+              },
+              approvalArea: {
                 select: { id: true, name: true },
               },
             },
@@ -107,6 +109,9 @@ export const recessRouter = router({
             orderBy: { stepNumber: "asc" },
             include: {
               approver: {
+                select: { id: true, name: true },
+              },
+              approvalArea: {
                 select: { id: true, name: true },
               },
             },
@@ -276,7 +281,7 @@ export const recessRouter = router({
       const currentStep = await getCurrentPendingStep("RECESS", input.requestId);
 
       if (!currentStep) {
-        return { canApprove: false, step: null };
+        return { canApprove: false, isAdminOverride: false, step: null, potentialApprovers: [] };
       }
 
       // Buscar área do request para verificar permissão
@@ -285,13 +290,26 @@ export const recessRouter = router({
         include: { provider: true },
       });
 
-      const canApprove = await canUserApproveStep(
+      const permission = await checkApprovalPermission(
         ctx.session.user.id,
         currentStep.role,
-        request?.provider.areaId
+        request?.provider.areaId,
+        currentStep.approvalAreaId || undefined
       );
 
-      return { canApprove, step: currentStep };
+      // Buscar aprovadores potenciais para a etapa atual
+      const potentialApprovers = await getPotentialApprovers(
+        currentStep.role,
+        request?.provider.areaId,
+        currentStep.approvalAreaId || undefined
+      );
+
+      return {
+        canApprove: permission.canApprove,
+        isAdminOverride: permission.isAdminOverride,
+        step: currentStep,
+        potentialApprovers,
+      };
     }),
 
   // Obter histórico de recesso de um prestador

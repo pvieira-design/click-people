@@ -2,8 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Briefcase,
   Edit,
+  Layers,
   Loader2,
   MoreHorizontal,
   Plus,
@@ -45,45 +45,43 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type Position = {
+type HierarchyLevel = {
   id: string;
   name: string;
+  level: number;
+  canApprove: boolean;
   userCount: number;
-  providerCount: number;
-  areas: { id: string; name: string }[];
-  isGlobal: boolean;
-  createdAt: string | Date;
 };
 
 type FormData = {
   name: string;
-  areaIds: string[];
+  level: string;
 };
 
 const initialFormData: FormData = {
   name: "",
-  areaIds: [],
+  level: "10",
 };
 
-export default function AdminCargosPage() {
+
+export default function AdminNiveisPage() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
+  const [selectedLevel, setSelectedLevel] = useState<HierarchyLevel | null>(null);
   const [formData, setFormData] = useState<FormData>(initialFormData);
 
   // Queries
-  const positionsQuery = useQuery(trpc.position.list.queryOptions());
-  const areasQuery = useQuery(trpc.area.list.queryOptions());
+  const levelsQuery = useQuery(trpc.hierarchyLevel.list.queryOptions());
 
   // Mutations
   const createMutation = useMutation(
-    trpc.position.create.mutationOptions({
+    trpc.hierarchyLevel.create.mutationOptions({
       onSuccess: () => {
-        toast.success("Cargo criado com sucesso!");
-        queryClient.invalidateQueries({ queryKey: trpc.position.list.queryKey() });
+        toast.success("Senioridade criada com sucesso!");
+        queryClient.invalidateQueries({ queryKey: trpc.hierarchyLevel.list.queryKey() });
         setIsCreateDialogOpen(false);
         setFormData(initialFormData);
       },
@@ -94,12 +92,12 @@ export default function AdminCargosPage() {
   );
 
   const updateMutation = useMutation(
-    trpc.position.update.mutationOptions({
+    trpc.hierarchyLevel.update.mutationOptions({
       onSuccess: () => {
-        toast.success("Cargo atualizado com sucesso!");
-        queryClient.invalidateQueries({ queryKey: trpc.position.list.queryKey() });
+        toast.success("Senioridade atualizada com sucesso!");
+        queryClient.invalidateQueries({ queryKey: trpc.hierarchyLevel.list.queryKey() });
         setIsEditDialogOpen(false);
-        setSelectedPosition(null);
+        setSelectedLevel(null);
         setFormData(initialFormData);
       },
       onError: (error) => {
@@ -109,12 +107,12 @@ export default function AdminCargosPage() {
   );
 
   const deleteMutation = useMutation(
-    trpc.position.delete.mutationOptions({
+    trpc.hierarchyLevel.delete.mutationOptions({
       onSuccess: () => {
-        toast.success("Cargo removido com sucesso!");
-        queryClient.invalidateQueries({ queryKey: trpc.position.list.queryKey() });
+        toast.success("Senioridade removida com sucesso!");
+        queryClient.invalidateQueries({ queryKey: trpc.hierarchyLevel.list.queryKey() });
         setIsDeleteDialogOpen(false);
-        setSelectedPosition(null);
+        setSelectedLevel(null);
       },
       onError: (error) => {
         toast.error(error.message);
@@ -122,72 +120,65 @@ export default function AdminCargosPage() {
     })
   );
 
-  // Filter positions
-  const filteredPositions = positionsQuery.data?.filter((position) =>
-    position.name.toLowerCase().includes(searchTerm.toLowerCase())
+  // Filter levels
+  const filteredLevels = levelsQuery.data?.filter((level) =>
+    level.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // Handlers
   const handleCreate = () => {
     if (!formData.name.trim()) {
-      toast.error("Preencha o nome do cargo");
+      toast.error("Preencha o nome da senioridade");
       return;
     }
     createMutation.mutate({
       name: formData.name.trim(),
-      areaIds: formData.areaIds,
+      level: parseInt(formData.level),
+      canApprove: false, // Deprecated: approval is now based on area designation
     });
   };
 
   const handleUpdate = () => {
-    if (!selectedPosition || !formData.name.trim()) return;
+    if (!selectedLevel || !formData.name.trim()) return;
     updateMutation.mutate({
-      id: selectedPosition.id,
+      id: selectedLevel.id,
       name: formData.name.trim(),
-      areaIds: formData.areaIds,
+      level: parseInt(formData.level),
+      canApprove: false, // Deprecated: approval is now based on area designation
     });
   };
 
   const handleDelete = () => {
-    if (!selectedPosition) return;
-    deleteMutation.mutate({ id: selectedPosition.id });
+    if (!selectedLevel) return;
+    deleteMutation.mutate({ id: selectedLevel.id });
   };
 
-  const openEditDialog = (position: Position) => {
-    setSelectedPosition(position);
+  const openEditDialog = (level: HierarchyLevel) => {
+    setSelectedLevel(level);
     setFormData({
-      name: position.name,
-      areaIds: position.areas.map((a) => a.id),
+      name: level.name,
+      level: level.level.toString(),
     });
     setIsEditDialogOpen(true);
   };
 
-  const openDeleteDialog = (position: Position) => {
-    setSelectedPosition(position);
+  const openDeleteDialog = (level: HierarchyLevel) => {
+    setSelectedLevel(level);
     setIsDeleteDialogOpen(true);
-  };
-
-  const toggleAreaSelection = (areaId: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      areaIds: prev.areaIds.includes(areaId)
-        ? prev.areaIds.filter((id) => id !== areaId)
-        : [...prev.areaIds, areaId],
-    }));
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Cargos</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Senioridades</h1>
           <p className="text-muted-foreground">
-            Gerencie os cargos e funcoes da empresa
+            Gerencie os niveis de senioridade dos colaboradores
           </p>
         </div>
         <Button onClick={() => setIsCreateDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          Novo Cargo
+          Nova Senioridade
         </Button>
       </div>
 
@@ -195,21 +186,21 @@ export default function AdminCargosPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Cargos</CardTitle>
-            <Briefcase className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total de Senioridades</CardTitle>
+            <Layers className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{positionsQuery.data?.length || 0}</div>
+            <div className="text-2xl font-bold">{levelsQuery.data?.length || 0}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Pessoas</CardTitle>
+            <CardTitle className="text-sm font-medium">Total de Usuarios</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {(positionsQuery.data?.reduce((acc, pos) => acc + pos.userCount + pos.providerCount, 0) || 0)}
+              {levelsQuery.data?.reduce((acc, l) => acc + l.userCount, 0) || 0}
             </div>
           </CardContent>
         </Card>
@@ -217,9 +208,9 @@ export default function AdminCargosPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Lista de Cargos</CardTitle>
+          <CardTitle>Lista de Senioridades</CardTitle>
           <CardDescription>
-            {filteredPositions?.length || 0} cargos encontrados
+            {filteredLevels?.length || 0} senioridades encontradas (ordenadas por nivel)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -237,13 +228,13 @@ export default function AdminCargosPage() {
           </div>
 
           {/* Table */}
-          {positionsQuery.isLoading ? (
+          {levelsQuery.isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : filteredPositions?.length === 0 ? (
+          ) : filteredLevels?.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              Nenhum cargo encontrado
+              Nenhuma senioridade encontrada
             </div>
           ) : (
             <div className="rounded-md border">
@@ -251,46 +242,23 @@ export default function AdminCargosPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
-                    <TableHead>Areas</TableHead>
                     <TableHead className="text-center">Usuarios</TableHead>
-                    <TableHead className="text-center">Prestadores</TableHead>
                     <TableHead className="w-[70px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPositions?.map((position) => (
-                    <TableRow key={position.id}>
+                  {filteredLevels?.map((level) => (
+                    <TableRow key={level.id}>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                            <Briefcase className="h-4 w-4 text-primary" />
+                            <Layers className="h-4 w-4 text-primary" />
                           </div>
-                          {position.name}
+                          {level.name}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        {position.isGlobal ? (
-                          <Badge variant="secondary">Global</Badge>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {position.areas.slice(0, 2).map((area) => (
-                              <Badge key={area.id} variant="outline" className="text-xs">
-                                {area.name}
-                              </Badge>
-                            ))}
-                            {position.areas.length > 2 && (
-                              <Badge variant="outline" className="text-xs">
-                                +{position.areas.length - 2}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-                      </TableCell>
                       <TableCell className="text-center">
-                        <Badge variant="secondary">{position.userCount}</Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="secondary">{position.providerCount}</Badge>
+                        <Badge variant="secondary">{level.userCount}</Badge>
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -298,15 +266,15 @@ export default function AdminCargosPage() {
                             <MoreHorizontal className="h-4 w-4" />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openEditDialog(position)}>
+                            <DropdownMenuItem onClick={() => openEditDialog(level)}>
                               <Edit className="mr-2 h-4 w-4" />
                               Editar
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              onClick={() => openDeleteDialog(position)}
+                              onClick={() => openDeleteDialog(level)}
                               className="text-destructive focus:text-destructive"
-                              disabled={position.userCount > 0 || position.providerCount > 0}
+                              disabled={level.userCount > 0}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               Excluir
@@ -327,42 +295,35 @@ export default function AdminCargosPage() {
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Novo Cargo</DialogTitle>
+            <DialogTitle>Nova Senioridade</DialogTitle>
             <DialogDescription>
-              Crie um novo cargo ou funcao.
+              Crie uma nova senioridade para os colaboradores.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="name">Nome do Cargo *</Label>
+              <Label htmlFor="name">Nome da Senioridade *</Label>
               <Input
                 id="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ex: Dev Frontend, Analista, Gerente..."
+                placeholder="Ex: Junior, Pleno, Senior, Lead..."
               />
             </div>
             <div className="grid gap-2">
-              <Label>Areas</Label>
+              <Label htmlFor="level">Ordem de Exibicao *</Label>
+              <Input
+                id="level"
+                type="number"
+                min="1"
+                max="200"
+                value={formData.level}
+                onChange={(e) => setFormData({ ...formData, level: e.target.value })}
+                placeholder="Ex: 10, 20, 30..."
+              />
               <p className="text-xs text-muted-foreground">
-                Deixe vazio para cargo global (disponivel em todas as areas)
+                O valor determina a ordem de exibicao (maior = mais alto na lista).
               </p>
-              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                {areasQuery.data?.map((area) => (
-                  <label
-                    key={area.id}
-                    className="flex items-center gap-2 cursor-pointer text-sm hover:bg-muted/50 p-1 rounded"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formData.areaIds.includes(area.id)}
-                      onChange={() => toggleAreaSelection(area.id)}
-                      className="rounded border-gray-300"
-                    />
-                    {area.name}
-                  </label>
-                ))}
-              </div>
             </div>
           </div>
           <DialogFooter>
@@ -371,7 +332,7 @@ export default function AdminCargosPage() {
             </Button>
             <Button onClick={handleCreate} disabled={createMutation.isPending}>
               {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Criar Cargo
+              Criar Senioridade
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -381,42 +342,32 @@ export default function AdminCargosPage() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Editar Cargo</DialogTitle>
+            <DialogTitle>Editar Senioridade</DialogTitle>
             <DialogDescription>
-              Atualize os dados do cargo.
+              Atualize os dados da senioridade.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="edit-name">Nome do Cargo *</Label>
+              <Label htmlFor="edit-name">Nome da Senioridade *</Label>
               <Input
                 id="edit-name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ex: Dev Frontend, Analista, Gerente..."
+                placeholder="Ex: Junior, Pleno, Senior, Lead..."
               />
             </div>
             <div className="grid gap-2">
-              <Label>Areas</Label>
-              <p className="text-xs text-muted-foreground">
-                Deixe vazio para cargo global (disponivel em todas as areas)
-              </p>
-              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                {areasQuery.data?.map((area) => (
-                  <label
-                    key={area.id}
-                    className="flex items-center gap-2 cursor-pointer text-sm hover:bg-muted/50 p-1 rounded"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formData.areaIds.includes(area.id)}
-                      onChange={() => toggleAreaSelection(area.id)}
-                      className="rounded border-gray-300"
-                    />
-                    {area.name}
-                  </label>
-                ))}
-              </div>
+              <Label htmlFor="edit-level">Ordem de Exibicao *</Label>
+              <Input
+                id="edit-level"
+                type="number"
+                min="1"
+                max="200"
+                value={formData.level}
+                onChange={(e) => setFormData({ ...formData, level: e.target.value })}
+                placeholder="Ex: 10, 20, 30..."
+              />
             </div>
           </div>
           <DialogFooter>
@@ -437,17 +388,16 @@ export default function AdminCargosPage() {
           <DialogHeader>
             <DialogTitle>Confirmar Exclusao</DialogTitle>
             <DialogDescription>
-              {selectedPosition &&
-              (selectedPosition.userCount > 0 || selectedPosition.providerCount > 0) ? (
+              {selectedLevel && selectedLevel.userCount > 0 ? (
                 <span className="text-destructive">
-                  Nao e possivel excluir o cargo{" "}
-                  <span className="font-semibold">{selectedPosition?.name}</span> pois existem
-                  usuarios ou prestadores vinculados.
+                  Nao e possivel excluir a senioridade{" "}
+                  <span className="font-semibold">{selectedLevel?.name}</span> pois existem
+                  usuarios vinculados.
                 </span>
               ) : (
                 <>
-                  Tem certeza que deseja excluir o cargo{" "}
-                  <span className="font-semibold">{selectedPosition?.name}</span>? Esta acao nao
+                  Tem certeza que deseja excluir a senioridade{" "}
+                  <span className="font-semibold">{selectedLevel?.name}</span>? Esta acao nao
                   pode ser desfeita.
                 </>
               )}
@@ -461,9 +411,7 @@ export default function AdminCargosPage() {
               variant="destructive"
               onClick={handleDelete}
               disabled={
-                deleteMutation.isPending ||
-                !!(selectedPosition &&
-                  (selectedPosition.userCount > 0 || selectedPosition.providerCount > 0))
+                deleteMutation.isPending || !!(selectedLevel && selectedLevel.userCount > 0)
               }
             >
               {deleteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
