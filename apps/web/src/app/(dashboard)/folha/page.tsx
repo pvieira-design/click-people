@@ -4,6 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Check,
   Download,
   FileSpreadsheet,
@@ -13,7 +16,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { trpc } from "@/utils/trpc";
@@ -58,11 +61,16 @@ type EditingState = {
   value: string;
 } | null;
 
+type SortColumn = "name" | "area" | "position" | "salary" | "startDate" | "ndaStatus" | "contractStatus" | "isActive";
+type SortDirection = "asc" | "desc";
+
 export default function FolhaPage() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [editing, setEditing] = useState<EditingState>(null);
+  const [sortColumn, setSortColumn] = useState<SortColumn>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   // Queries
   const providersQuery = useQuery(
@@ -88,6 +96,64 @@ export default function FolhaPage() {
       },
     })
   );
+
+  // Sorting logic
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
+
+  const sortedProviders = useMemo(() => {
+    if (!providersQuery.data) return [];
+
+    return [...providersQuery.data].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortColumn) {
+        case "name":
+          comparison = a.name.localeCompare(b.name, "pt-BR");
+          break;
+        case "area":
+          comparison = a.area.name.localeCompare(b.area.name, "pt-BR");
+          break;
+        case "position":
+          comparison = a.position.name.localeCompare(b.position.name, "pt-BR");
+          break;
+        case "salary":
+          comparison = a.salary - b.salary;
+          break;
+        case "startDate":
+          comparison = new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+          break;
+        case "ndaStatus":
+          comparison = a.ndaStatus.localeCompare(b.ndaStatus);
+          break;
+        case "contractStatus":
+          comparison = a.contractStatus.localeCompare(b.contractStatus);
+          break;
+        case "isActive":
+          comparison = (a.isActive === b.isActive) ? 0 : a.isActive ? -1 : 1;
+          break;
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+  }, [providersQuery.data, sortColumn, sortDirection]);
+
+  const SortIcon = ({ column }: { column: SortColumn }) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="ml-1 h-4 w-4 text-muted-foreground/50" />;
+    }
+    return sortDirection === "asc" ? (
+      <ArrowUp className="ml-1 h-4 w-4" />
+    ) : (
+      <ArrowDown className="ml-1 h-4 w-4" />
+    );
+  };
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
@@ -258,18 +324,82 @@ export default function FolhaPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Área</TableHead>
-                    <TableHead>Cargo</TableHead>
-                    <TableHead>Salário</TableHead>
-                    <TableHead>Data Início</TableHead>
-                    <TableHead>NDA</TableHead>
-                    <TableHead>Contrato</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none hover:bg-muted/50"
+                      onClick={() => handleSort("name")}
+                    >
+                      <div className="flex items-center">
+                        Nome
+                        <SortIcon column="name" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none hover:bg-muted/50"
+                      onClick={() => handleSort("area")}
+                    >
+                      <div className="flex items-center">
+                        Área
+                        <SortIcon column="area" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none hover:bg-muted/50"
+                      onClick={() => handleSort("position")}
+                    >
+                      <div className="flex items-center">
+                        Cargo
+                        <SortIcon column="position" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none hover:bg-muted/50"
+                      onClick={() => handleSort("salary")}
+                    >
+                      <div className="flex items-center">
+                        Salário
+                        <SortIcon column="salary" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none hover:bg-muted/50"
+                      onClick={() => handleSort("startDate")}
+                    >
+                      <div className="flex items-center">
+                        Data Início
+                        <SortIcon column="startDate" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none hover:bg-muted/50"
+                      onClick={() => handleSort("ndaStatus")}
+                    >
+                      <div className="flex items-center">
+                        NDA
+                        <SortIcon column="ndaStatus" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none hover:bg-muted/50"
+                      onClick={() => handleSort("contractStatus")}
+                    >
+                      <div className="flex items-center">
+                        Contrato
+                        <SortIcon column="contractStatus" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none hover:bg-muted/50"
+                      onClick={() => handleSort("isActive")}
+                    >
+                      <div className="flex items-center">
+                        Status
+                        <SortIcon column="isActive" />
+                      </div>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {providersQuery.data?.map((provider) => (
+                  {sortedProviders.map((provider) => (
                     <TableRow key={provider.id} className={!provider.isActive ? "opacity-60" : ""}>
                       <TableCell className="font-medium">{provider.name}</TableCell>
                       <TableCell>{provider.area.name}</TableCell>

@@ -245,7 +245,7 @@ export default function AdminAreasPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Areas sem Diretor</CardTitle>
+            <CardTitle className="text-sm font-medium">Areas sem Head</CardTitle>
             <AlertTriangle className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
@@ -323,7 +323,7 @@ export default function AdminAreasPage() {
                   <TableRow>
                     <TableHead>Nome</TableHead>
                     <TableHead>C-Level</TableHead>
-                    <TableHead>Diretor</TableHead>
+                    <TableHead>Head</TableHead>
                     <TableHead>Lider</TableHead>
                     <TableHead className="text-center">Usuarios</TableHead>
                     <TableHead className="text-center">Prestadores</TableHead>
@@ -513,11 +513,11 @@ export default function AdminAreasPage() {
               </p>
             </div>
 
-            {/* Diretor */}
+            {/* Head */}
             <div className="grid gap-2">
               <Label className="flex items-center gap-2">
                 <Shield className="h-4 w-4 text-blue-600" />
-                Diretor
+                Head
               </Label>
               <Select
                 value={formDirectorId || "none"}

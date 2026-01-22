@@ -23,176 +23,95 @@ async function main() {
   console.log("🌱 Iniciando seed do banco de dados...\n");
 
   // =============================================
-  // 1. CRIAR NÍVEIS HIERÁRQUICOS (simplificados)
+  // 0. LIMPAR DADOS EXISTENTES
   // =============================================
-  console.log("📊 Criando níveis hierárquicos...");
+  console.log("🧹 Limpando dados existentes...");
 
-  const targetLevels = [
+  // Limpar associações de usuários
+  await prisma.user.updateMany({
+    data: { areaId: null, positionId: null, hierarchyLevelId: null },
+  });
+  console.log("  ✓ Associações de usuários removidas");
+
+  // Excluir dados existentes (ordem respeitando foreign keys)
+  // 1. Primeiro deletar approval steps (referenciam requests e areas)
+  await prisma.approvalStep.deleteMany({});
+  console.log("  ✓ Etapas de aprovação removidas");
+
+  // 2. Deletar todas as solicitações (referenciam providers e areas)
+  await prisma.recessRequest.deleteMany({});
+  await prisma.terminationRequest.deleteMany({});
+  await prisma.hiringRequest.deleteMany({});
+  await prisma.purchaseRequest.deleteMany({});
+  await prisma.remunerationRequest.deleteMany({});
+  console.log("  ✓ Solicitações removidas");
+
+  // 3. Deletar bonus records (referenciam areas)
+  await prisma.bonusRecord.deleteMany({});
+  console.log("  ✓ Registros de bônus removidos");
+
+  // 4. Agora podemos deletar prestadores
+  await prisma.provider.deleteMany({});
+  console.log("  ✓ Prestadores removidos");
+
+  // 5. Deletar associações cargo-área
+  await prisma.areaPosition.deleteMany({});
+  console.log("  ✓ Associações cargo-área removidas");
+
+  await prisma.area.deleteMany({});
+  console.log("  ✓ Áreas removidas");
+
+  await prisma.position.deleteMany({});
+  console.log("  ✓ Cargos removidos");
+
+  await prisma.hierarchyLevel.deleteMany({});
+  console.log("  ✓ Níveis hierárquicos removidos");
+
+  // =============================================
+  // 1. CRIAR NÍVEIS HIERÁRQUICOS (9 níveis)
+  // =============================================
+  console.log("\n📊 Criando níveis hierárquicos...");
+
+  const hierarchyLevels = [
     { name: "Junior", level: 10, canApprove: false },
     { name: "Pleno", level: 20, canApprove: false },
     { name: "Senior", level: 30, canApprove: false },
-    { name: "Especialista", level: 35, canApprove: false },
-    { name: "Coordenador", level: 40, canApprove: false },
-    { name: "Gerente", level: 50, canApprove: false },
-    { name: "Head", level: 70, canApprove: false },
-    { name: "Diretoria", level: 80, canApprove: true },
-    { name: "C-level", level: 90, canApprove: true },
-    { name: "Vice Presidente", level: 105, canApprove: true },
-    { name: "Sócio", level: 110, canApprove: true },
+    { name: "Líder", level: 40, canApprove: false },
+    { name: "Coordenador", level: 50, canApprove: false },
+    { name: "Head", level: 60, canApprove: false },
+    { name: "Diretor", level: 70, canApprove: true },
+    { name: "VP", level: 80, canApprove: true },
+    { name: "CEO", level: 90, canApprove: true },
   ];
 
-  // Mapeamento de nomes antigos para novos (para migração)
-  const nameRenames: Record<string, string> = {
-    "Diretor": "Diretoria",
-    "Diretor RH": "C-level",
-    "CTO": "C-level",
-    "CMO": "C-level",
-    "COO": "C-level",
-    "CFO": "C-level",
-    "CEO": "C-level",
-  };
-
-  // Níveis que devem ser removidos (consolidados em outros)
-  const levelsToRemove = ["Diretor RH", "CTO", "CMO", "COO", "CFO", "CEO"];
-
-  // 1. Primeiro, migrar usuários e prestadores dos níveis que serão removidos
-  for (const oldName of levelsToRemove) {
-    const oldLevel = await prisma.hierarchyLevel.findUnique({ where: { name: oldName } });
-    if (oldLevel) {
-      const newName = nameRenames[oldName] || "C-level";
-      let newLevel = await prisma.hierarchyLevel.findUnique({ where: { name: newName } });
-
-      // Se o novo nível não existe ainda, criar com level temporário
-      if (!newLevel) {
-        newLevel = await prisma.hierarchyLevel.create({
-          data: { name: newName, level: 900 + levelsToRemove.indexOf(oldName), canApprove: true },
-        });
-      }
-
-      // Migrar usuários
-      await prisma.user.updateMany({
-        where: { hierarchyLevelId: oldLevel.id },
-        data: { hierarchyLevelId: newLevel.id },
-      });
-
-      // Migrar prestadores
-      await prisma.provider.updateMany({
-        where: { hierarchyLevelId: oldLevel.id },
-        data: { hierarchyLevelId: newLevel.id },
-      });
-
-      console.log(`  ↪ Migrados usuários/prestadores de "${oldName}" para "${newName}"`);
-    }
-  }
-
-  // 2. Renomear "Diretor" para "Diretoria"
-  const diretor = await prisma.hierarchyLevel.findUnique({ where: { name: "Diretor" } });
-  if (diretor) {
-    await prisma.hierarchyLevel.update({
-      where: { id: diretor.id },
-      data: { name: "Diretoria" },
-    });
-    console.log(`  ↪ Renomeado "Diretor" para "Diretoria"`);
-  }
-
-  // 3. Remover níveis antigos (agora sem usuários vinculados)
-  for (const oldName of levelsToRemove) {
-    try {
-      await prisma.hierarchyLevel.delete({ where: { name: oldName } });
-      console.log(`  🗑 Removido nível "${oldName}"`);
-    } catch {
-      // Pode não existir
-    }
-  }
-
-  // 4. Criar/atualizar os níveis alvo
-  for (const level of targetLevels) {
-    await prisma.hierarchyLevel.upsert({
-      where: { name: level.name },
-      update: { level: level.level, canApprove: level.canApprove },
-      create: level,
+  for (const level of hierarchyLevels) {
+    await prisma.hierarchyLevel.create({
+      data: level,
     });
     console.log(`  ✓ ${level.name} (nível ${level.level})`);
   }
 
-  // 5. Remover níveis que não estão na lista alvo
-  const finalLevels = await prisma.hierarchyLevel.findMany();
-  const targetNames = targetLevels.map((l) => l.name);
-  for (const level of finalLevels) {
-    if (!targetNames.includes(level.name)) {
-      try {
-        await prisma.hierarchyLevel.delete({ where: { id: level.id } });
-        console.log(`  🗑 Removido nível extra "${level.name}"`);
-      } catch {
-        console.log(`  ⚠ Não foi possível remover "${level.name}" (pode ter usuários vinculados)`);
-      }
-    }
-  }
-
   // =============================================
-  // 2. CRIAR CARGOS (funções - sem hierarquia)
+  // 2. CRIAR CARGOS (10 cargos)
   // =============================================
   console.log("\n📋 Criando cargos...");
 
   const positions = [
-    // Tecnologia
-    "Dev Frontend",
-    "Dev Backend",
-    "Dev Fullstack",
-    "Dev Mobile",
-    "QA Engineer",
-    "DevOps Engineer",
-    "Data Engineer",
-    "Data Analyst",
-    "Product Owner",
-    "Product Manager",
-    "Tech Lead",
-    "Designer UI/UX",
-    "Designer",
-
-    // Atendimento / Comercial
-    "Atendente",
-    "Consultor de Vendas",
-    "Customer Success",
-    "Supervisor",
-
-    // Marketing
-    "Content Manager",
-    "Social Media",
-    "Growth Analyst",
-    "Copywriter",
-
-    // Operações / Admin
-    "Analista Administrativo",
-    "Analista Financeiro",
-    "Analista de RH",
-    "Assistente",
-
-    // Médico / Saúde
-    "Médico",
-    "Coordenador Médico",
-
-    // Cargos genéricos
-    "Analista",
-    "Coordenador",
-    "Gerente",
-    "Head",
-    "Diretor",
-    "Diretor RH",
-    "CTO",
-    "CMO",
-    "COO",
-    "CFO",
     "CEO",
-    "Vice Presidente",
-    "Sócio",
+    "VP",
+    "Diretor",
+    "Head",
+    "Coordenador",
+    "Líder",
+    "Analista Senior",
+    "Analista Pleno",
+    "Analista Junior",
+    "Designer",
   ];
 
   for (const positionName of positions) {
-    await prisma.position.upsert({
-      where: { name: positionName },
-      update: {},
-      create: { name: positionName },
+    await prisma.position.create({
+      data: { name: positionName },
     });
     console.log(`  ✓ ${positionName}`);
   }
@@ -203,79 +122,29 @@ async function main() {
   console.log("\n🏢 Criando áreas...");
 
   const areas = [
-    "Atendimento - Consulta Médica",
-    "Atendimento - Documentação",
-    "Atendimento - Inicial",
-    "Atendimento - Pós Venda",
-    "Atendimento - Receita & Orçamento",
-    "Design",
     "Financeiro",
-    "Geral",
-    "Gestão de Médicos",
     "Marketing",
-    "Operações",
-    "RH",
+    "Operações - Inicial",
+    "Operações - Consulta Médica",
+    "Operações - Receita e Orçamento",
+    "Operações - Documentação",
+    "Operações - Pós Venda",
+    "Operações - Gestão de Médicos",
     "Tecnologia",
+    "Presidência",
+    "Médicos",
+    "Recursos Humanos",
   ];
 
   for (const areaName of areas) {
-    await prisma.area.upsert({
-      where: { name: areaName },
-      update: {},
-      create: { name: areaName },
+    await prisma.area.create({
+      data: { name: areaName },
     });
     console.log(`  ✓ ${areaName}`);
   }
 
   // =============================================
-  // 4. ASSOCIAÇÕES CARGO-ÁREA (cargos multi-área)
-  // =============================================
-  console.log("\n🔗 Configurando associações cargo-área...");
-
-  // Definir cargos que pertencem a múltiplas áreas
-  const positionAreaMappings: Record<string, string[]> = {
-    "Designer UI/UX": ["Tecnologia", "Marketing", "Design"],
-  };
-
-  for (const [positionName, areaNames] of Object.entries(positionAreaMappings)) {
-    const position = await prisma.position.findUnique({
-      where: { name: positionName },
-    });
-
-    if (!position) {
-      console.log(`  ⚠ Cargo "${positionName}" não encontrado, pulando...`);
-      continue;
-    }
-
-    // Remover associações antigas
-    await prisma.areaPosition.deleteMany({
-      where: { positionId: position.id },
-    });
-
-    // Criar novas associações
-    for (const areaName of areaNames) {
-      const area = await prisma.area.findUnique({
-        where: { name: areaName },
-      });
-
-      if (!area) {
-        console.log(`  ⚠ Área "${areaName}" não encontrada, pulando...`);
-        continue;
-      }
-
-      await prisma.areaPosition.create({
-        data: {
-          positionId: position.id,
-          areaId: area.id,
-        },
-      });
-    }
-
-    console.log(`  ✓ ${positionName} → ${areaNames.join(", ")}`);
-  }
-
-  // =============================================
-  // 5. CONFIGURAÇÕES DO SISTEMA
+  // 4. CONFIGURAÇÕES DO SISTEMA
   // =============================================
   console.log("\n⚙️  Criando configurações do sistema...");
 
@@ -309,15 +178,15 @@ async function main() {
         flows: {
           RECESS: {
             enabled: true,
-            steps: ["REQUEST_AREA", "RH", "Diretoria"],
+            steps: ["REQUEST_AREA", "Recursos Humanos", "Presidência"],
           },
           TERMINATION: {
             enabled: true,
-            steps: ["REQUEST_AREA", "RH", "Diretoria"],
+            steps: ["REQUEST_AREA", "Recursos Humanos", "Presidência"],
           },
           HIRING: {
             enabled: true,
-            steps: ["REQUEST_AREA", "RH", "Financeiro", "Diretoria"],
+            steps: ["REQUEST_AREA", "Recursos Humanos", "Financeiro", "Presidência"],
           },
           PURCHASE: {
             enabled: true,
@@ -325,7 +194,7 @@ async function main() {
           },
           REMUNERATION: {
             enabled: true,
-            steps: ["REQUEST_AREA", "RH", "Financeiro", "Diretoria"],
+            steps: ["REQUEST_AREA", "Recursos Humanos", "Financeiro", "Presidência"],
           },
         },
       },
@@ -342,14 +211,13 @@ async function main() {
   }
 
   // =============================================
-  // 6. RESUMO
+  // 5. RESUMO
   // =============================================
   console.log("\n✅ Seed concluído com sucesso!");
   console.log("\n📊 Resumo:");
-  console.log(`   - ${targetLevels.length} níveis hierárquicos criados`);
+  console.log(`   - ${hierarchyLevels.length} níveis hierárquicos criados`);
   console.log(`   - ${positions.length} cargos criados`);
   console.log(`   - ${areas.length} áreas criadas`);
-  console.log(`   - ${Object.keys(positionAreaMappings).length} cargos com áreas configuradas`);
   console.log(`   - ${configs.length} configurações criadas`);
 
   console.log("\n💡 Próximos passos:");

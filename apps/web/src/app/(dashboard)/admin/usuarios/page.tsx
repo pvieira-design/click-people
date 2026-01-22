@@ -530,9 +530,10 @@ export default function AdminUsuariosPage() {
               {/* Criar como Prestador */}
               <div className="space-y-4 pt-4 border-t">
                 <div>
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className={`flex items-center gap-2 ${createForm.providerId ? "cursor-not-allowed" : "cursor-pointer"}`}>
                     <Checkbox
                       checked={createForm.createAsProvider}
+                      disabled={!!createForm.providerId}
                       onCheckedChange={(checked) =>
                         setCreateForm({
                           ...createForm,
@@ -541,7 +542,7 @@ export default function AdminUsuariosPage() {
                         })
                       }
                     />
-                    <span className="text-sm font-medium">Criar tambem como Prestador</span>
+                    <span className={`text-sm font-medium ${createForm.providerId ? "text-muted-foreground" : ""}`}>Criar tambem como Prestador</span>
                   </label>
                   <p className="text-xs text-muted-foreground mt-1">
                     Cria um registro de prestador vinculado a este usuario
