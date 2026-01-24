@@ -78,16 +78,18 @@ model AreaPosition {
 // =============================================
 
 model Provider {
-  id             String         @id @default(cuid())
-  name           String
-  salary         Decimal        @db.Decimal(10, 2)
-  startDate      DateTime       @db.Date
-  seniority      Seniority      @default(NA)
-  ndaStatus      DocumentStatus @default(NOT_SIGNED)
-  contractStatus DocumentStatus @default(NOT_SIGNED)
-  isActive       Boolean        @default(true)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id              String         @id @default(cuid())
+  name            String
+  salary          Decimal        @db.Decimal(10, 2)
+  startDate       DateTime       @db.Date
+  seniority       Seniority      @default(NA)
+  ndaStatus       DocumentStatus @default(NOT_SIGNED)
+  ndaFileUrl      String?        // URL do PDF do NDA assinado (Vercel Blob)
+  contractStatus  DocumentStatus @default(NOT_SIGNED)
+  contractFileUrl String?        // URL do PDF do Contrato assinado (Vercel Blob)
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   // Relações
   areaId           String
@@ -152,6 +154,11 @@ enum ApprovalRole {
   PARTNER
 }
 
+enum TerminationType {
+  RESIGNATION // Pedido de demissão (prestador pediu)
+  DISMISSAL   // Demissão (empresa demitiu)
+}
+
 // =============================================
 // MÓDULO: RECESSO / FÉRIAS
 // =============================================
@@ -190,15 +197,18 @@ model RecessRequest {
 // =============================================
 
 model TerminationRequest {
-  id        String        @id @default(cuid())
-  status    RequestStatus @default(PENDING)
-  reason    String        @db.Text // Obrigatório, mínimo 10 caracteres
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id              String          @id @default(cuid())
+  status          RequestStatus   @default(PENDING)
+  terminationType TerminationType
+  terminationDate DateTime        @db.Date
+  reason          String          @db.Text // Obrigatório, mínimo 10 caracteres
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   // Snapshot dos dados do prestador no momento da criação
   providerArea     String
   providerPosition String
+  providerSalary   Decimal         @db.Decimal(10, 2)
 
   // Relações
   providerId String

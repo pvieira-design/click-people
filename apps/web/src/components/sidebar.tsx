@@ -171,10 +171,10 @@ export default function Sidebar({ isAdmin = false }: SidebarProps) {
       <Link
         href={href as any}
         className={cn(
-          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200",
           isActive
-            ? "bg-primary text-primary-foreground"
-            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            ? "bg-primary text-white shadow-md"
+            : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
         )}
       >
         <Icon className="h-4 w-4 shrink-0" />
@@ -216,7 +216,7 @@ export default function Sidebar({ isAdmin = false }: SidebarProps) {
   }) => (
     <div className="space-y-1">
       {!collapsed && (
-        <h3 className="px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <h3 className="px-3 text-xs font-semibold uppercase tracking-wider text-primary/70">
           {title}
         </h3>
       )}
@@ -244,28 +244,28 @@ export default function Sidebar({ isAdmin = false }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "flex flex-col border-r bg-sidebar text-sidebar-foreground transition-all duration-300",
+        "flex flex-col border-r glass-strong text-sidebar-foreground transition-all duration-300",
         collapsed ? "w-16" : "w-64"
       )}
     >
-      <div className="flex h-14 items-center border-b px-4">
+      <div className="flex h-14 items-center px-4 bg-primary">
         {!collapsed && (
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Logo size={20} className="text-primary-foreground" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm">
+              <Logo size={20} className="text-white" />
             </div>
-            <span className="font-semibold">Click People</span>
+            <span className="font-semibold text-white">Click People</span>
           </Link>
         )}
         {collapsed && (
-          <Link href="/dashboard" className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Logo size={20} className="text-primary-foreground" />
+          <Link href="/dashboard" className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm">
+            <Logo size={20} className="text-white" />
           </Link>
         )}
         <Button
           variant="ghost"
           size="icon"
-          className={cn("ml-auto", collapsed && "mx-auto")}
+          className={cn("ml-auto text-white hover:bg-white/20", collapsed && "mx-auto")}
           onClick={() => setCollapsed(!collapsed)}
         >
           {collapsed ? (
@@ -283,11 +283,11 @@ export default function Sidebar({ isAdmin = false }: SidebarProps) {
         {isAdmin && <NavSection title="Administracao" items={adminNavItems} />}
       </div>
 
-      <div className="border-t p-4">
+      <div className="border-t border-primary/10 p-4">
         <Button
           variant="ghost"
           className={cn(
-            "w-full justify-start text-muted-foreground hover:text-foreground",
+            "w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10",
             collapsed && "justify-center"
           )}
           onClick={handleSignOut}

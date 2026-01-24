@@ -10,6 +10,7 @@ import {
   Check,
   Download,
   FileSpreadsheet,
+  FileText,
   Loader2,
   Pencil,
   Search,
@@ -21,6 +22,7 @@ import { toast } from "sonner";
 
 import { trpc } from "@/utils/trpc";
 
+import { DocumentUploadModal } from "@/components/document-upload-modal";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { Badge } from "@/components/ui/badge";
@@ -49,10 +51,28 @@ type Provider = {
   salary: number;
   startDate: string | Date;
   ndaStatus: "SIGNED" | "NOT_SIGNED";
+  ndaFileUrl: string | null;
   contractStatus: "SIGNED" | "NOT_SIGNED";
+  contractFileUrl: string | null;
   isActive: boolean;
   area: { id: string; name: string };
   position: { id: string; name: string };
+};
+
+type UploadModalState = {
+  open: boolean;
+  documentType: "nda" | "contract";
+  providerId: string;
+  providerName: string;
+} | null;
+
+type UpdateProviderInput = {
+  id: string;
+  salary?: number;
+  ndaStatus?: "SIGNED" | "NOT_SIGNED";
+  ndaFileUrl?: string | null;
+  contractStatus?: "SIGNED" | "NOT_SIGNED";
+  contractFileUrl?: string | null;
 };
 
 type EditingState = {
@@ -71,6 +91,7 @@ export default function FolhaPage() {
   const [editing, setEditing] = useState<EditingState>(null);
   const [sortColumn, setSortColumn] = useState<SortColumn>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [uploadModal, setUploadModal] = useState<UploadModalState>(null);
 
   // Queries
   const providersQuery = useQuery(
@@ -165,19 +186,53 @@ export default function FolhaPage() {
   const handleSaveEdit = (provider: Provider) => {
     if (!editing) return;
 
-    const updateData: any = { id: provider.id };
-
     if (editing.field === "salary") {
       const salary = parseFloat(editing.value.replace(/[^\d,]/g, "").replace(",", "."));
       if (isNaN(salary) || salary <= 0) {
         toast.error("Valor de salário inválido");
         return;
       }
-      updateData.salary = salary;
+      updateMutation.mutate({ id: provider.id, salary });
     } else if (editing.field === "ndaStatus") {
-      updateData.ndaStatus = editing.value;
+      const newStatus = editing.value as "SIGNED" | "NOT_SIGNED";
+      // Se mudando para SIGNED e não tem arquivo, abrir modal de upload
+      if (newStatus === "SIGNED" && !provider.ndaFileUrl) {
+        setUploadModal({
+          open: true,
+          documentType: "nda",
+          providerId: provider.id,
+          providerName: provider.name,
+        });
+        return;
+      }
+      updateMutation.mutate({ id: provider.id, ndaStatus: newStatus });
     } else if (editing.field === "contractStatus") {
-      updateData.contractStatus = editing.value;
+      const newStatus = editing.value as "SIGNED" | "NOT_SIGNED";
+      // Se mudando para SIGNED e não tem arquivo, abrir modal de upload
+      if (newStatus === "SIGNED" && !provider.contractFileUrl) {
+        setUploadModal({
+          open: true,
+          documentType: "contract",
+          providerId: provider.id,
+          providerName: provider.name,
+        });
+        return;
+      }
+      updateMutation.mutate({ id: provider.id, contractStatus: newStatus });
+    }
+  };
+
+  const handleUploadSuccess = (fileUrl: string) => {
+    if (!uploadModal) return;
+
+    const updateData: UpdateProviderInput = { id: uploadModal.providerId };
+
+    if (uploadModal.documentType === "nda") {
+      updateData.ndaStatus = "SIGNED";
+      updateData.ndaFileUrl = fileUrl;
+    } else {
+      updateData.contractStatus = "SIGNED";
+      updateData.contractFileUrl = fileUrl;
     }
 
     updateMutation.mutate(updateData);
@@ -500,6 +555,17 @@ export default function FolhaPage() {
                             >
                               {provider.ndaStatus === "SIGNED" ? "Assinado" : "Pendente"}
                             </Badge>
+                            {provider.ndaFileUrl && (
+                              <a
+                                href={provider.ndaFileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                                title="Ver documento"
+                              >
+                                <FileText className="h-4 w-4" />
+                              </a>
+                            )}
                             <Button
                               size="icon"
                               variant="ghost"
@@ -559,6 +625,17 @@ export default function FolhaPage() {
                             >
                               {provider.contractStatus === "SIGNED" ? "Assinado" : "Pendente"}
                             </Badge>
+                            {provider.contractFileUrl && (
+                              <a
+                                href={provider.contractFileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                                title="Ver documento"
+                              >
+                                <FileText className="h-4 w-4" />
+                              </a>
+                            )}
                             <Button
                               size="icon"
                               variant="ghost"
@@ -590,6 +667,23 @@ export default function FolhaPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal de Upload de Documento */}
+      {uploadModal && (
+        <DocumentUploadModal
+          open={uploadModal.open}
+          onOpenChange={(open) => {
+            if (!open) {
+              setUploadModal(null);
+              setEditing(null);
+            }
+          }}
+          documentType={uploadModal.documentType}
+          providerId={uploadModal.providerId}
+          providerName={uploadModal.providerName}
+          onUploadSuccess={handleUploadSuccess}
+        />
+      )}
     </div>
   );
 }

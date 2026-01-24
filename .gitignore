@@ -51,3 +51,6 @@ coverage
 .cache
 tmp
 temp
+
+# Local uploads (development)
+apps/web/public/uploads

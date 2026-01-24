@@ -530,6 +530,38 @@ export async function getApprovalSteps(
   });
 }
 
+/**
+ * Retorna os IDs das áreas onde o usuário é aprovador designado (diretor ou C-level)
+ */
+export async function getUserApprovalAreaIds(userId: string): Promise<string[]> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      directorOfAreas: { select: { id: true } },
+      cLevelOfAreas: { select: { id: true } },
+    },
+  });
+
+  if (!user) return [];
+
+  const areaIds = new Set<string>();
+  user.directorOfAreas.forEach((area) => areaIds.add(area.id));
+  user.cLevelOfAreas.forEach((area) => areaIds.add(area.id));
+
+  return Array.from(areaIds);
+}
+
+/**
+ * Verifica se o usuário é admin
+ */
+export async function isUserAdmin(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true },
+  });
+  return user?.isAdmin ?? false;
+}
+
 // Funções auxiliares
 function getRequestAreaId(step: any): string | undefined {
   if (step.recessRequest) return step.recessRequest.provider?.areaId;

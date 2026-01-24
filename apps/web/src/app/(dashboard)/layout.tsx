@@ -45,10 +45,10 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden gradient-primary-subtle">
       <Sidebar isAdmin={user.isAdmin} />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 items-center justify-between border-b bg-background px-6">
+        <header className="flex h-14 items-center justify-between border-b glass-subtle px-6">
           <div />
           <UserNav
             name={user.name}
@@ -56,7 +56,7 @@ export default async function DashboardLayout({
             isAdmin={user.isAdmin}
           />
         </header>
-        <main className="flex-1 overflow-y-auto bg-muted/30 p-6">
+        <main className="flex-1 overflow-y-auto p-6">
           {children}
         </main>
       </div>

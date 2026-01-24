@@ -24,13 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -38,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const PRIORITY_LABELS = {
   HIGH: "Alta",
@@ -59,18 +53,27 @@ const calculatePercentChange = (oldValue: number, newValue: number) => {
 
 export default function RemunerationListPage() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState("todas");
 
   const requestsQuery = useQuery(
-    trpc.remuneration.list.queryOptions({
-      status: statusFilter !== "all" ? (statusFilter as "PENDING" | "APPROVED" | "REJECTED") : undefined,
-    })
+    trpc.remuneration.list.queryOptions({})
   );
 
-  const filteredRequests = requestsQuery.data?.filter((r) =>
-    r.provider.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.providerArea.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredRequests = requestsQuery.data?.filter((r) => {
+    const matchesSearch =
+      r.provider.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.providerArea.toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (activeTab === "todas") return matchesSearch;
+    if (activeTab === "pendentes") return matchesSearch && r.status === "PENDING";
+    if (activeTab === "aprovadas") return matchesSearch && r.status === "APPROVED";
+    if (activeTab === "acompanhamento") {
+      // Aprovados com data de vigência futura
+      return matchesSearch && r.status === "APPROVED" && new Date(r.effectiveDate) >= new Date();
+    }
+
+    return matchesSearch;
+  });
 
   return (
     <div className="space-y-6">
@@ -124,145 +127,147 @@ export default function RemunerationListPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Rejeitadas</CardTitle>
-            <DollarSign className="h-4 w-4 text-red-500" />
+            <CardTitle className="text-sm font-medium">Aguard. Vigência</CardTitle>
+            <DollarSign className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {requestsQuery.data?.filter((r) => r.status === "REJECTED").length || 0}
+            <div className="text-2xl font-bold text-blue-600">
+              {requestsQuery.data?.filter((r) => r.status === "APPROVED" && new Date(r.effectiveDate) >= new Date()).length || 0}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Solicitações</CardTitle>
-          <CardDescription>
-            Lista de todas as solicitações de mudança de remuneração
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {/* Filters */}
-          <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por prestador ou área..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v)}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="PENDING">Pendentes</SelectItem>
-                <SelectItem value="APPROVED">Aprovadas</SelectItem>
-                <SelectItem value="REJECTED">Rejeitadas</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="todas">Todas</TabsTrigger>
+          <TabsTrigger value="pendentes">Pendentes</TabsTrigger>
+          <TabsTrigger value="aprovadas">Aprovadas</TabsTrigger>
+          <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
+        </TabsList>
 
-          {/* Table */}
-          {requestsQuery.isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : requestsQuery.isError ? (
-            <ErrorState
-              message={requestsQuery.error?.message}
-              onRetry={() => requestsQuery.refetch()}
-            />
-          ) : filteredRequests?.length === 0 ? (
-            <EmptyState
-              icon={DollarSign}
-              title="Nenhuma solicitacao encontrada"
-              description={searchTerm || statusFilter !== "all" ? "Tente ajustar os filtros" : "Nenhuma solicitacao de remuneracao cadastrada"}
-            />
-          ) : (
-            <div className="rounded-2xl border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Prestador</TableHead>
-                    <TableHead>Área</TableHead>
-                    <TableHead>Salário Atual</TableHead>
-                    <TableHead>Novo Salário</TableHead>
-                    <TableHead>Variação</TableHead>
-                    <TableHead>Prioridade</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Vigência</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRequests?.map((request) => {
-                    const percentChange = calculatePercentChange(
-                      request.currentSalary,
-                      request.newSalary
-                    );
+        <TabsContent value={activeTab} className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Solicitações</CardTitle>
+              <CardDescription>
+                {activeTab === "acompanhamento"
+                  ? "Mudanças de remuneração aguardando vigência"
+                  : "Lista de solicitações de mudança de remuneração"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Filters */}
+              <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por prestador ou área..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
 
-                    return (
-                      <TableRow key={request.id}>
-                        <TableCell className="font-medium">
-                          {request.provider.name}
-                        </TableCell>
-                        <TableCell>{request.providerArea}</TableCell>
-                        <TableCell>{formatCurrency(request.currentSalary)}</TableCell>
-                        <TableCell className="font-medium">
-                          {formatCurrency(request.newSalary)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1 text-green-600">
-                            <ArrowUpRight className="h-4 w-4" />
-                            <span>+{percentChange.toFixed(1)}%</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              request.priority === "HIGH"
-                                ? "destructive"
-                                : request.priority === "MEDIUM"
-                                  ? "default"
-                                  : "secondary"
-                            }
-                          >
-                            {PRIORITY_LABELS[request.priority]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <ApprovalStatusBadge
-                            status={request.status}
-                            currentStep={request.currentStep}
-                            totalSteps={request.totalSteps}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {format(new Date(request.effectiveDate), "dd/MM/yyyy", {
-                            locale: ptBR,
-                          })}
-                        </TableCell>
-                        <TableCell>
-                          <Link href={`/solicitacoes/remuneracao/${request.id}`}>
-                            <Button size="icon" variant="ghost">
-                              <ChevronRight className="h-4 w-4" />
-                            </Button>
-                          </Link>
-                        </TableCell>
+              {/* Table */}
+              {requestsQuery.isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : requestsQuery.isError ? (
+                <ErrorState
+                  message={requestsQuery.error?.message}
+                  onRetry={() => requestsQuery.refetch()}
+                />
+              ) : filteredRequests?.length === 0 ? (
+                <EmptyState
+                  icon={DollarSign}
+                  title="Nenhuma solicitacao encontrada"
+                  description={searchTerm ? "Tente ajustar os filtros" : "Nenhuma solicitacao de remuneracao cadastrada"}
+                />
+              ) : (
+                <div className="rounded-2xl border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Prestador</TableHead>
+                        <TableHead>Área</TableHead>
+                        <TableHead>Salário Atual</TableHead>
+                        <TableHead>Novo Salário</TableHead>
+                        <TableHead>Variação</TableHead>
+                        <TableHead>Prioridade</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Vigência</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredRequests?.map((request) => {
+                        const percentChange = calculatePercentChange(
+                          request.currentSalary,
+                          request.newSalary
+                        );
+
+                        return (
+                          <TableRow key={request.id}>
+                            <TableCell className="font-medium">
+                              {request.provider.name}
+                            </TableCell>
+                            <TableCell>{request.providerArea}</TableCell>
+                            <TableCell>{formatCurrency(request.currentSalary)}</TableCell>
+                            <TableCell className="font-medium">
+                              {formatCurrency(request.newSalary)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1 text-green-600">
+                                <ArrowUpRight className="h-4 w-4" />
+                                <span>+{percentChange.toFixed(1)}%</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  request.priority === "HIGH"
+                                    ? "destructive"
+                                    : request.priority === "MEDIUM"
+                                      ? "default"
+                                      : "secondary"
+                                }
+                              >
+                                {PRIORITY_LABELS[request.priority]}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <ApprovalStatusBadge
+                                status={request.status}
+                                currentStep={request.currentStep}
+                                totalSteps={request.totalSteps}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {format(new Date(request.effectiveDate), "dd/MM/yyyy", {
+                                locale: ptBR,
+                              })}
+                            </TableCell>
+                            <TableCell>
+                              <Link href={`/solicitacoes/remuneracao/${request.id}`}>
+                                <Button size="icon" variant="ghost">
+                                  <ChevronRight className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

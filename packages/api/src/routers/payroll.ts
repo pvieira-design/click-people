@@ -52,7 +52,9 @@ export const payrollRouter = router({
         salary: provider.salary.toNumber(),
         startDate: provider.startDate,
         ndaStatus: provider.ndaStatus,
+        ndaFileUrl: provider.ndaFileUrl,
         contractStatus: provider.contractStatus,
+        contractFileUrl: provider.contractFileUrl,
         isActive: provider.isActive,
         area: {
           id: provider.area.id,
@@ -72,7 +74,9 @@ export const payrollRouter = router({
         id: z.string(),
         salary: z.number().positive().optional(),
         ndaStatus: z.enum(["SIGNED", "NOT_SIGNED"]).optional(),
+        ndaFileUrl: z.string().optional().nullable(),
         contractStatus: z.enum(["SIGNED", "NOT_SIGNED"]).optional(),
+        contractFileUrl: z.string().optional().nullable(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -91,9 +95,37 @@ export const payrollRouter = router({
 
       const { id, ...data } = input;
 
+      // Buscar provider atual para verificar URLs existentes
+      const existingProvider = await prisma.provider.findUnique({
+        where: { id },
+        select: { ndaFileUrl: true, contractFileUrl: true },
+      });
+
+      if (!existingProvider) {
+        throw new Error("Prestador não encontrado.");
+      }
+
+      // Validar que URL é obrigatória ao mudar para SIGNED (se não houver URL existente)
+      if (data.ndaStatus === "SIGNED" && !data.ndaFileUrl && !existingProvider.ndaFileUrl) {
+        throw new Error("É necessário fazer upload do PDF do NDA para marcar como assinado.");
+      }
+
+      if (data.contractStatus === "SIGNED" && !data.contractFileUrl && !existingProvider.contractFileUrl) {
+        throw new Error("É necessário fazer upload do PDF do Contrato para marcar como assinado.");
+      }
+
+      // Se mudando para NOT_SIGNED, limpar a URL do arquivo
+      const updateData: Record<string, unknown> = { ...data };
+      if (data.ndaStatus === "NOT_SIGNED") {
+        updateData.ndaFileUrl = null;
+      }
+      if (data.contractStatus === "NOT_SIGNED") {
+        updateData.contractFileUrl = null;
+      }
+
       const provider = await prisma.provider.update({
         where: { id },
-        data,
+        data: updateData,
       });
 
       return provider;

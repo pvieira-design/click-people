@@ -10,7 +10,42 @@ import {
   getCurrentPendingStep,
   checkApprovalPermission,
   getPotentialApprovers,
+  getUserApprovalAreaIds,
+  isUserAdmin,
 } from "../lib/approval-engine";
+
+// Tipos e função de cálculo para desligamento
+interface TerminationCalculation {
+  daysWorkedInMonth: number;
+  totalDaysInMonth: number;
+  proportionalSalary: number;
+  additionalSalary: number;
+  totalDue: number;
+}
+
+function calculateTerminationValue(
+  salary: number,
+  terminationDate: Date,
+  terminationType: "RESIGNATION" | "DISMISSAL"
+): TerminationCalculation {
+  const date = new Date(terminationDate);
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const dayOfTermination = date.getDate();
+  const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const proportionalSalary = (salary * dayOfTermination) / totalDaysInMonth;
+  const additionalSalary = terminationType === "DISMISSAL" ? salary : 0;
+  const totalDue = proportionalSalary + additionalSalary;
+
+  return {
+    daysWorkedInMonth: dayOfTermination,
+    totalDaysInMonth,
+    proportionalSalary: Math.round(proportionalSalary * 100) / 100,
+    additionalSalary: Math.round(additionalSalary * 100) / 100,
+    totalDue: Math.round(totalDue * 100) / 100,
+  };
+}
 
 export const terminationRouter = router({
   // Listar todas as solicitações de desligamento
@@ -25,29 +60,47 @@ export const terminationRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const { status, providerId } = input || {};
+      const userId = ctx.session.user.id;
 
-      const currentUser = await prisma.user.findUnique({
-        where: { id: ctx.session.user.id },
-        include: { hierarchyLevel: true, area: true },
-      });
-
-      const isAdmin = currentUser?.isAdmin;
-      const isDirector = (currentUser?.hierarchyLevel?.level || 0) >= 80;
+      const isAdmin = await isUserAdmin(userId);
+      const userApprovalAreaIds = await getUserApprovalAreaIds(userId);
 
       // Filtros base
-      const where: any = {};
+      const baseWhere: any = {};
 
       if (status) {
-        where.status = status;
+        baseWhere.status = status;
       }
 
       if (providerId) {
-        where.providerId = providerId;
+        baseWhere.providerId = providerId;
       }
 
-      // Se não for admin nem diretor, só pode ver suas próprias solicitações
-      if (!isAdmin && !isDirector) {
-        where.creatorId = ctx.session.user.id;
+      // Construir filtro de visibilidade
+      let where: any;
+
+      if (isAdmin) {
+        where = baseWhere;
+      } else if (userApprovalAreaIds.length > 0) {
+        where = {
+          ...baseWhere,
+          OR: [
+            { creatorId: userId },
+            {
+              approvalSteps: {
+                some: {
+                  status: "PENDING",
+                  approvalAreaId: { in: userApprovalAreaIds },
+                },
+              },
+            },
+          ],
+        };
+      } else {
+        where = {
+          ...baseWhere,
+          creatorId: userId,
+        };
       }
 
       const requests = await prisma.terminationRequest.findMany({
@@ -77,9 +130,12 @@ export const terminationRouter = router({
       return requests.map((r) => ({
         id: r.id,
         status: r.status,
+        terminationType: r.terminationType,
+        terminationDate: r.terminationDate,
         reason: r.reason,
         providerArea: r.providerArea,
         providerPosition: r.providerPosition,
+        providerSalary: r.providerSalary.toNumber(),
         createdAt: r.createdAt,
         provider: r.provider,
         creator: r.creator,
@@ -120,12 +176,21 @@ export const terminationRouter = router({
         throw new Error("Solicitação não encontrada");
       }
 
+      // Calcular valor devido
+      const terminationInfo = calculateTerminationValue(
+        request.providerSalary.toNumber(),
+        request.terminationDate,
+        request.terminationType
+      );
+
       return {
         ...request,
         provider: {
           ...request.provider,
           salary: request.provider.salary.toNumber(),
         },
+        providerSalary: request.providerSalary.toNumber(),
+        terminationInfo,
         currentStep: request.approvalSteps.find((s) => s.status === "PENDING")?.stepNumber,
         totalSteps: request.approvalSteps.length,
       };
@@ -136,11 +201,13 @@ export const terminationRouter = router({
     .input(
       z.object({
         providerId: z.string(),
+        terminationType: z.enum(["RESIGNATION", "DISMISSAL"]),
+        terminationDate: z.string(),
         reason: z.string().min(10, "Motivo deve ter pelo menos 10 caracteres"),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { providerId, reason } = input;
+      const { providerId, terminationType, terminationDate, reason } = input;
 
       // Buscar dados do prestador
       const provider = await prisma.provider.findUnique({
@@ -178,9 +245,12 @@ export const terminationRouter = router({
         data: {
           providerId,
           creatorId: ctx.session.user.id,
+          terminationType,
+          terminationDate: new Date(terminationDate),
           reason,
           providerArea: provider.area.name,
           providerPosition: provider.position.name,
+          providerSalary: provider.salary,
         },
       });
 

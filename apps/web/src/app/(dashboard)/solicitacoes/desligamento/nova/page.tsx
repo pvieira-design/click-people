@@ -12,8 +12,16 @@ import { trpc } from "@/utils/trpc";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 export default function NewTerminationPage() {
@@ -22,6 +30,8 @@ export default function NewTerminationPage() {
 
   const [formData, setFormData] = useState({
     providerId: "",
+    terminationType: "" as "RESIGNATION" | "DISMISSAL" | "",
+    terminationDate: "",
     reason: "",
   });
 
@@ -50,6 +60,16 @@ export default function NewTerminationPage() {
       return;
     }
 
+    if (!formData.terminationType) {
+      toast.error("Selecione o tipo de desligamento");
+      return;
+    }
+
+    if (!formData.terminationDate) {
+      toast.error("Informe a data de desligamento");
+      return;
+    }
+
     if (!formData.reason || formData.reason.length < 10) {
       toast.error("O motivo deve ter pelo menos 10 caracteres");
       return;
@@ -57,6 +77,8 @@ export default function NewTerminationPage() {
 
     createMutation.mutate({
       providerId: formData.providerId,
+      terminationType: formData.terminationType,
+      terminationDate: formData.terminationDate,
       reason: formData.reason,
     });
   };
@@ -135,6 +157,38 @@ export default function NewTerminationPage() {
                   </div>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label>Tipo de Desligamento *</Label>
+                <Select
+                  value={formData.terminationType}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, terminationType: value as "RESIGNATION" | "DISMISSAL" })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="RESIGNATION">Pedido de Demissão</SelectItem>
+                    <SelectItem value="DISMISSAL">Demissão pela Empresa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Data Final de Desligamento *</Label>
+                <Input
+                  type="date"
+                  value={formData.terminationDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, terminationDate: e.target.value })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Último dia de trabalho do prestador
+                </p>
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="reason">

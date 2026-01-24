@@ -6,6 +6,7 @@ import { ptBR } from "date-fns/locale";
 import {
   AlertTriangle,
   ArrowLeft,
+  DollarSign,
   Loader2,
   User,
 } from "lucide-react";
@@ -22,6 +23,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+
+const TERMINATION_TYPE_LABELS = {
+  RESIGNATION: "Pedido de Demissão",
+  DISMISSAL: "Demissão pela Empresa",
+};
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
 export default function TerminationDetailPage() {
   const params = useParams();
@@ -175,6 +184,67 @@ export default function TerminationDetailPage() {
             </CardHeader>
             <CardContent>
               <p className="text-sm whitespace-pre-wrap">{request.reason}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5" />
+                Informações de Desligamento
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Tipo */}
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Tipo:</span>
+                <Badge variant={request.terminationType === "DISMISSAL" ? "destructive" : "secondary"}>
+                  {TERMINATION_TYPE_LABELS[request.terminationType]}
+                </Badge>
+              </div>
+
+              {/* Data */}
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Data de Desligamento:</span>
+                <span className="font-medium">
+                  {format(new Date(request.terminationDate), "dd/MM/yyyy", { locale: ptBR })}
+                </span>
+              </div>
+
+              <Separator />
+
+              {/* Cálculo */}
+              <div className="p-4 bg-amber-50 rounded-xl space-y-3">
+                <h4 className="font-semibold text-amber-800">Valor Devido pela Empresa</h4>
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-amber-700">Salário base:</span>
+                    <span>{formatCurrency(request.providerSalary)}</span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-amber-700">
+                      Proporcional ({request.terminationInfo.daysWorkedInMonth}/{request.terminationInfo.totalDaysInMonth} dias):
+                    </span>
+                    <span>{formatCurrency(request.terminationInfo.proportionalSalary)}</span>
+                  </div>
+
+                  {request.terminationType === "DISMISSAL" && (
+                    <div className="flex justify-between">
+                      <span className="text-amber-700">Salário adicional (demissão):</span>
+                      <span>{formatCurrency(request.terminationInfo.additionalSalary)}</span>
+                    </div>
+                  )}
+
+                  <Separator className="bg-amber-200" />
+
+                  <div className="flex justify-between text-base font-bold text-amber-900">
+                    <span>Total Devido:</span>
+                    <span>{formatCurrency(request.terminationInfo.totalDue)}</span>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
 

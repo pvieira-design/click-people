@@ -10,6 +10,8 @@ import {
   getCurrentPendingStep,
   checkApprovalPermission,
   getPotentialApprovers,
+  getUserApprovalAreaIds,
+  isUserAdmin,
 } from "../lib/approval-engine";
 
 export const hiringRouter = router({
@@ -25,29 +27,54 @@ export const hiringRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const { status, hiringStatus } = input || {};
+      const userId = ctx.session.user.id;
 
-      const currentUser = await prisma.user.findUnique({
-        where: { id: ctx.session.user.id },
-        include: { hierarchyLevel: true, area: true },
-      });
-
-      const isAdmin = currentUser?.isAdmin;
-      const isDirector = (currentUser?.hierarchyLevel?.level || 0) >= 80;
+      const isAdmin = await isUserAdmin(userId);
+      const userApprovalAreaIds = await getUserApprovalAreaIds(userId);
 
       // Filtros base
-      const where: any = {};
+      const baseWhere: any = {};
 
       if (status) {
-        where.status = status;
+        baseWhere.status = status;
       }
 
       if (hiringStatus) {
-        where.hiringStatus = hiringStatus;
+        baseWhere.hiringStatus = hiringStatus;
       }
 
-      // Se não for admin nem diretor, só pode ver suas próprias solicitações
-      if (!isAdmin && !isDirector) {
-        where.creatorId = ctx.session.user.id;
+      // Construir filtro de visibilidade
+      // Usuário pode ver:
+      // 1. Solicitações que ele criou
+      // 2. Solicitações pendentes de aprovação em áreas onde ele é aprovador
+      // 3. Admin vê tudo
+      let where: any;
+
+      if (isAdmin) {
+        where = baseWhere;
+      } else if (userApprovalAreaIds.length > 0) {
+        // Usuário é aprovador de alguma área
+        where = {
+          ...baseWhere,
+          OR: [
+            { creatorId: userId },
+            {
+              // Solicitações com etapa pendente em área onde o usuário é aprovador
+              approvalSteps: {
+                some: {
+                  status: "PENDING",
+                  approvalAreaId: { in: userApprovalAreaIds },
+                },
+              },
+            },
+          ],
+        };
+      } else {
+        // Usuário comum - só vê suas próprias solicitações
+        where = {
+          ...baseWhere,
+          creatorId: userId,
+        };
       }
 
       const requests = await prisma.hiringRequest.findMany({

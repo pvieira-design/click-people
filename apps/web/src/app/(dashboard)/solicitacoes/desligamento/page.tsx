@@ -23,13 +23,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -37,21 +30,31 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function TerminationListPage() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState("todas");
 
   const requestsQuery = useQuery(
-    trpc.termination.list.queryOptions({
-      status: statusFilter !== "all" ? (statusFilter as "PENDING" | "APPROVED" | "REJECTED") : undefined,
-    })
+    trpc.termination.list.queryOptions({})
   );
 
-  const filteredRequests = requestsQuery.data?.filter((r) =>
-    r.provider.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.providerArea.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredRequests = requestsQuery.data?.filter((r) => {
+    const matchesSearch =
+      r.provider.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.providerArea.toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (activeTab === "todas") return matchesSearch;
+    if (activeTab === "pendentes") return matchesSearch && r.status === "PENDING";
+    if (activeTab === "aprovadas") return matchesSearch && r.status === "APPROVED";
+    if (activeTab === "acompanhamento") {
+      // Aprovados onde o prestador ainda está ativo (aguardando efetivação)
+      return matchesSearch && r.status === "APPROVED" && r.provider.isActive;
+    }
+
+    return matchesSearch;
+  });
 
   return (
     <div className="space-y-6">
@@ -105,119 +108,121 @@ export default function TerminationListPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Rejeitadas</CardTitle>
-            <UserMinus className="h-4 w-4 text-red-500" />
+            <CardTitle className="text-sm font-medium">Aguard. Efetivação</CardTitle>
+            <UserMinus className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {requestsQuery.data?.filter((r) => r.status === "REJECTED").length || 0}
+            <div className="text-2xl font-bold text-blue-600">
+              {requestsQuery.data?.filter((r) => r.status === "APPROVED" && r.provider.isActive).length || 0}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Solicitações</CardTitle>
-          <CardDescription>
-            Lista de todas as solicitações de desligamento
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {/* Filters */}
-          <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por prestador ou área..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v)}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="PENDING">Pendentes</SelectItem>
-                <SelectItem value="APPROVED">Aprovadas</SelectItem>
-                <SelectItem value="REJECTED">Rejeitadas</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="todas">Todas</TabsTrigger>
+          <TabsTrigger value="pendentes">Pendentes</TabsTrigger>
+          <TabsTrigger value="aprovadas">Aprovadas</TabsTrigger>
+          <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
+        </TabsList>
 
-          {/* Table */}
-          {requestsQuery.isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : requestsQuery.isError ? (
-            <ErrorState
-              message={requestsQuery.error?.message}
-              onRetry={() => requestsQuery.refetch()}
-            />
-          ) : filteredRequests?.length === 0 ? (
-            <EmptyState
-              icon={UserMinus}
-              title="Nenhuma solicitacao encontrada"
-              description={searchTerm || statusFilter !== "all" ? "Tente ajustar os filtros" : "Nenhuma solicitacao de desligamento cadastrada"}
-            />
-          ) : (
-            <div className="rounded-2xl border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Prestador</TableHead>
-                    <TableHead>Área</TableHead>
-                    <TableHead>Cargo</TableHead>
-                    <TableHead>Status Prestador</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Solicitado em</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRequests?.map((request) => (
-                    <TableRow key={request.id}>
-                      <TableCell className="font-medium">
-                        {request.provider.name}
-                      </TableCell>
-                      <TableCell>{request.providerArea}</TableCell>
-                      <TableCell>{request.providerPosition}</TableCell>
-                      <TableCell>
-                        <Badge variant={request.provider.isActive ? "default" : "destructive"}>
-                          {request.provider.isActive ? "Ativo" : "Desligado"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <ApprovalStatusBadge
-                          status={request.status}
-                          currentStep={request.currentStep}
-                          totalSteps={request.totalSteps}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {format(new Date(request.createdAt), "dd/MM/yyyy", {
-                          locale: ptBR,
-                        })}
-                      </TableCell>
-                      <TableCell>
-                        <Link href={`/solicitacoes/desligamento/${request.id}`}>
-                          <Button size="icon" variant="ghost">
-                            <ChevronRight className="h-4 w-4" />
-                          </Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value={activeTab} className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Solicitações</CardTitle>
+              <CardDescription>
+                {activeTab === "acompanhamento"
+                  ? "Desligamentos aprovados aguardando efetivação"
+                  : "Lista de solicitações de desligamento"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Filters */}
+              <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por prestador ou área..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              {/* Table */}
+              {requestsQuery.isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : requestsQuery.isError ? (
+                <ErrorState
+                  message={requestsQuery.error?.message}
+                  onRetry={() => requestsQuery.refetch()}
+                />
+              ) : filteredRequests?.length === 0 ? (
+                <EmptyState
+                  icon={UserMinus}
+                  title="Nenhuma solicitacao encontrada"
+                  description={searchTerm ? "Tente ajustar os filtros" : "Nenhuma solicitacao de desligamento cadastrada"}
+                />
+              ) : (
+                <div className="rounded-2xl border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Prestador</TableHead>
+                        <TableHead>Área</TableHead>
+                        <TableHead>Cargo</TableHead>
+                        <TableHead>Status Prestador</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Solicitado em</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredRequests?.map((request) => (
+                        <TableRow key={request.id}>
+                          <TableCell className="font-medium">
+                            {request.provider.name}
+                          </TableCell>
+                          <TableCell>{request.providerArea}</TableCell>
+                          <TableCell>{request.providerPosition}</TableCell>
+                          <TableCell>
+                            <Badge variant={request.provider.isActive ? "default" : "destructive"}>
+                              {request.provider.isActive ? "Ativo" : "Desligado"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <ApprovalStatusBadge
+                              status={request.status}
+                              currentStep={request.currentStep}
+                              totalSteps={request.totalSteps}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {format(new Date(request.createdAt), "dd/MM/yyyy", {
+                              locale: ptBR,
+                            })}
+                          </TableCell>
+                          <TableCell>
+                            <Link href={`/solicitacoes/desligamento/${request.id}`}>
+                              <Button size="icon" variant="ghost">
+                                <ChevronRight className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

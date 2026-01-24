@@ -10,6 +10,8 @@ import {
   getCurrentPendingStep,
   checkApprovalPermission,
   getPotentialApprovers,
+  getUserApprovalAreaIds,
+  isUserAdmin,
 } from "../lib/approval-engine";
 
 export const remunerationRouter = router({
@@ -25,29 +27,47 @@ export const remunerationRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const { status, providerId } = input || {};
+      const userId = ctx.session.user.id;
 
-      const currentUser = await prisma.user.findUnique({
-        where: { id: ctx.session.user.id },
-        include: { hierarchyLevel: true, area: true },
-      });
-
-      const isAdmin = currentUser?.isAdmin;
-      const isDirector = (currentUser?.hierarchyLevel?.level || 0) >= 80;
+      const isAdmin = await isUserAdmin(userId);
+      const userApprovalAreaIds = await getUserApprovalAreaIds(userId);
 
       // Filtros base
-      const where: any = {};
+      const baseWhere: any = {};
 
       if (status) {
-        where.status = status;
+        baseWhere.status = status;
       }
 
       if (providerId) {
-        where.providerId = providerId;
+        baseWhere.providerId = providerId;
       }
 
-      // Se não for admin nem diretor, só pode ver suas próprias solicitações
-      if (!isAdmin && !isDirector) {
-        where.creatorId = ctx.session.user.id;
+      // Construir filtro de visibilidade
+      let where: any;
+
+      if (isAdmin) {
+        where = baseWhere;
+      } else if (userApprovalAreaIds.length > 0) {
+        where = {
+          ...baseWhere,
+          OR: [
+            { creatorId: userId },
+            {
+              approvalSteps: {
+                some: {
+                  status: "PENDING",
+                  approvalAreaId: { in: userApprovalAreaIds },
+                },
+              },
+            },
+          ],
+        };
+      } else {
+        where = {
+          ...baseWhere,
+          creatorId: userId,
+        };
       }
 
       const requests = await prisma.remunerationRequest.findMany({
