@@ -94,6 +94,9 @@ export default function FolhaPage() {
   const [uploadModal, setUploadModal] = useState<UploadModalState>(null);
 
   // Queries
+  const userQuery = useQuery(trpc.user.me.queryOptions());
+  const isAdmin = userQuery.data?.isAdmin ?? false;
+
   const providersQuery = useQuery(
     trpc.payroll.list.queryOptions({
       includeInactive: showInactive,
@@ -494,16 +497,18 @@ export default function FolhaPage() {
                         ) : (
                           <div className="flex items-center gap-2">
                             {formatCurrency(provider.salary)}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6 opacity-50 hover:opacity-100"
-                              onClick={() =>
-                                startEditing(provider.id, "salary", provider.salary.toString())
-                              }
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </Button>
+                            {isAdmin && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 opacity-50 hover:opacity-100"
+                                onClick={() =>
+                                  startEditing(provider.id, "salary", provider.salary.toString())
+                                }
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                            )}
                           </div>
                         )}
                       </TableCell>

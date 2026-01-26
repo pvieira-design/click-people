@@ -80,7 +80,7 @@ export const payrollRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Verificar permissões (admin ou Dir. RH)
+      // Verificar permissões
       const currentUser = await prisma.user.findUnique({
         where: { id: ctx.session.user.id },
         include: { hierarchyLevel: true },
@@ -89,6 +89,13 @@ export const payrollRouter = router({
       const isAdmin = currentUser?.isAdmin;
       const isHRDirector = currentUser?.hierarchyLevel?.level === 90;
 
+      // Salário: apenas admin pode alterar diretamente
+      // (outros usuários devem usar solicitação de alteração salarial)
+      if (input.salary !== undefined && !isAdmin) {
+        throw new Error("Acesso negado. Apenas administradores podem alterar salário diretamente. Use uma solicitação de alteração salarial.");
+      }
+
+      // NDA e Contrato: admin ou Dir. RH podem alterar
       if (!isAdmin && !isHRDirector) {
         throw new Error("Acesso negado. Apenas Admin ou Diretor RH podem editar a folha.");
       }
