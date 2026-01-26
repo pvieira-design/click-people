@@ -91,6 +91,20 @@ model Provider {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
+  // Dados pessoais
+  photoUrl    String?   // URL da foto 3x4 (Vercel Blob)
+  birthDate   DateTime? @db.Date // Data de nascimento
+  achievements String?  @db.Text // Feitos relevantes (texto livre)
+
+  // Endereço
+  addressStreet       String? // Rua/Logradouro
+  addressNumber       String? // Número
+  addressComplement   String? // Complemento
+  addressNeighborhood String? // Bairro
+  addressCity         String? // Cidade
+  addressState        String? // Estado (UF)
+  addressZipCode      String? // CEP
+
   // Relações
   areaId           String
   area             Area            @relation(fields: [areaId], references: [id])

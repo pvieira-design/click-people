@@ -25,6 +25,7 @@ import { trpc } from "@/utils/trpc";
 import { DocumentUploadModal } from "@/components/document-upload-modal";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
+import { ProviderDetailModal } from "@/components/provider-detail-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -92,10 +93,13 @@ export default function FolhaPage() {
   const [sortColumn, setSortColumn] = useState<SortColumn>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [uploadModal, setUploadModal] = useState<UploadModalState>(null);
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
 
   // Queries
   const userQuery = useQuery(trpc.user.me.queryOptions());
   const isAdmin = userQuery.data?.isAdmin ?? false;
+  const userHierarchyLevel = userQuery.data?.hierarchyLevel?.level ?? 0;
+  const canEditProviderDetails = isAdmin || userHierarchyLevel >= 90;
 
   const providersQuery = useQuery(
     trpc.payroll.list.queryOptions({
@@ -335,7 +339,7 @@ export default function FolhaPage() {
         <CardHeader>
           <CardTitle>Prestadores</CardTitle>
           <CardDescription>
-            Clique no ícone de edição para alterar salário, NDA ou contrato
+            Clique no nome do prestador para ver detalhes completos
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -459,7 +463,15 @@ export default function FolhaPage() {
                 <TableBody>
                   {sortedProviders.map((provider) => (
                     <TableRow key={provider.id} className={!provider.isActive ? "opacity-60" : ""}>
-                      <TableCell className="font-medium">{provider.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedProviderId(provider.id)}
+                          className="text-left hover:text-primary hover:underline underline-offset-2 transition-colors"
+                        >
+                          {provider.name}
+                        </button>
+                      </TableCell>
                       <TableCell>{provider.area.name}</TableCell>
                       <TableCell>{provider.position.name}</TableCell>
 
@@ -687,6 +699,20 @@ export default function FolhaPage() {
           providerId={uploadModal.providerId}
           providerName={uploadModal.providerName}
           onUploadSuccess={handleUploadSuccess}
+        />
+      )}
+
+      {/* Modal de Detalhes do Prestador */}
+      {selectedProviderId && (
+        <ProviderDetailModal
+          open={!!selectedProviderId}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedProviderId(null);
+            }
+          }}
+          providerId={selectedProviderId}
+          canEdit={canEditProviderDetails}
         />
       )}
     </div>

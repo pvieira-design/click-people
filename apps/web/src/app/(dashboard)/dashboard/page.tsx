@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   ArrowRight,
+  Cake,
   CalendarDays,
   Clock,
   CreditCard,
@@ -76,8 +77,14 @@ const HIRING_STATUS_LABELS: Record<string, string> = {
   HIRED: "Contratado",
 };
 
+const MONTH_NAMES = [
+  "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
+
 export default function DashboardPage() {
   const statsQuery = useQuery(trpc.dashboard.getGeneralStats.queryOptions());
+  const birthdaysQuery = useQuery(trpc.dashboard.getBirthdays.queryOptions());
 
   if (statsQuery.isLoading) {
     return (
@@ -145,6 +152,68 @@ export default function DashboardPage() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Aniversariantes */}
+      {birthdaysQuery.data && (birthdaysQuery.data.currentMonth.birthdays.length > 0 || birthdaysQuery.data.nextMonth.birthdays.length > 0) && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {birthdaysQuery.data.currentMonth.birthdays.length > 0 && (
+            <Card className="border-pink-200 dark:border-pink-900">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Cake className="h-4 w-4 text-pink-500" />
+                  Aniversariantes de {MONTH_NAMES[birthdaysQuery.data.currentMonth.month - 1]}
+                </CardTitle>
+                <CardDescription>
+                  {birthdaysQuery.data.currentMonth.birthdays.length} aniversariante{birthdaysQuery.data.currentMonth.birthdays.length > 1 ? "s" : ""} este mes
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {birthdaysQuery.data.currentMonth.birthdays.map((birthday) => (
+                    <div key={birthday.id} className="flex items-center justify-between p-2 rounded-lg bg-pink-50 dark:bg-pink-900/20">
+                      <div>
+                        <p className="text-sm font-medium">{birthday.name}</p>
+                        <p className="text-xs text-muted-foreground">{birthday.area} - {birthday.position}</p>
+                      </div>
+                      <Badge variant="outline" className="text-pink-600 border-pink-300">
+                        {format(new Date(birthday.birthDate), "dd/MM", { locale: ptBR })}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {birthdaysQuery.data.nextMonth.birthdays.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Cake className="h-4 w-4 text-muted-foreground" />
+                  Aniversariantes de {MONTH_NAMES[birthdaysQuery.data.nextMonth.month - 1]}
+                </CardTitle>
+                <CardDescription>
+                  {birthdaysQuery.data.nextMonth.birthdays.length} aniversariante{birthdaysQuery.data.nextMonth.birthdays.length > 1 ? "s" : ""} no proximo mes
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {birthdaysQuery.data.nextMonth.birthdays.map((birthday) => (
+                    <div key={birthday.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                      <div>
+                        <p className="text-sm font-medium">{birthday.name}</p>
+                        <p className="text-xs text-muted-foreground">{birthday.area} - {birthday.position}</p>
+                      </div>
+                      <Badge variant="secondary">
+                        {format(new Date(birthday.birthDate), "dd/MM", { locale: ptBR })}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 

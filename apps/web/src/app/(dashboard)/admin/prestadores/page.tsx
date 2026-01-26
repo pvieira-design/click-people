@@ -61,6 +61,7 @@ type Provider = {
   name: string;
   salary: number;
   startDate: string | Date;
+  birthDate?: string | Date | null;
   seniority?: string | null;
   ndaStatus: "SIGNED" | "NOT_SIGNED";
   contractStatus: "SIGNED" | "NOT_SIGNED";
@@ -76,6 +77,7 @@ type FormData = {
   name: string;
   salary: string;
   startDate: string;
+  birthDate: string;
   hierarchyLevelId: string;
   ndaStatus: "SIGNED" | "NOT_SIGNED";
   contractStatus: "SIGNED" | "NOT_SIGNED";
@@ -87,6 +89,7 @@ const initialFormData: FormData = {
   name: "",
   salary: "",
   startDate: new Date().toISOString().split("T")[0],
+  birthDate: "",
   hierarchyLevelId: "",
   ndaStatus: "NOT_SIGNED",
   contractStatus: "NOT_SIGNED",
@@ -199,6 +202,7 @@ export default function AdminPrestadoresPage() {
       name: formData.name,
       salary: parseFloat(formData.salary),
       startDate: formData.startDate,
+      birthDate: formData.birthDate || null,
       hierarchyLevelId: formData.hierarchyLevelId || undefined,
       ndaStatus: formData.ndaStatus,
       contractStatus: formData.contractStatus,
@@ -215,6 +219,7 @@ export default function AdminPrestadoresPage() {
       name: formData.name,
       salary: parseFloat(formData.salary),
       startDate: formData.startDate,
+      birthDate: formData.birthDate || null,
       hierarchyLevelId: formData.hierarchyLevelId || null,
       ndaStatus: formData.ndaStatus,
       contractStatus: formData.contractStatus,
@@ -234,6 +239,7 @@ export default function AdminPrestadoresPage() {
       name: provider.name,
       salary: provider.salary.toString(),
       startDate: new Date(provider.startDate).toISOString().split("T")[0],
+      birthDate: provider.birthDate ? new Date(provider.birthDate).toISOString().split("T")[0] : "",
       hierarchyLevelId: provider.hierarchyLevel?.id || "",
       ndaStatus: provider.ndaStatus,
       contractStatus: provider.contractStatus,
@@ -429,7 +435,7 @@ export default function AdminPrestadoresPage() {
                 placeholder="Nome completo"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="salary">Salario *</Label>
                 <Input
@@ -448,6 +454,15 @@ export default function AdminPrestadoresPage() {
                   type="date"
                   value={formData.startDate}
                   onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="birthDate">Data de Nascimento</Label>
+                <Input
+                  id="birthDate"
+                  type="date"
+                  value={formData.birthDate}
+                  onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
                 />
               </div>
             </div>
@@ -595,7 +610,7 @@ export default function AdminPrestadoresPage() {
                 placeholder="Nome completo"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="edit-salary">Salario *</Label>
                 <Input
@@ -614,6 +629,15 @@ export default function AdminPrestadoresPage() {
                   type="date"
                   value={formData.startDate}
                   onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-birthDate">Data de Nascimento</Label>
+                <Input
+                  id="edit-birthDate"
+                  type="date"
+                  value={formData.birthDate}
+                  onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
                 />
               </div>
             </div>

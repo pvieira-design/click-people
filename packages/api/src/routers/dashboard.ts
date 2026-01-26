@@ -736,6 +736,84 @@ export const dashboardRouter = router({
     return areas;
   }),
 
+  // Listar aniversariantes do mês atual e próximo
+  getBirthdays: protectedProcedure.query(async () => {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1; // 1-12
+    const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+
+    // Buscar todos os prestadores ativos com data de nascimento
+    const providers = await prisma.provider.findMany({
+      where: {
+        isActive: true,
+        birthDate: { not: null },
+      },
+      select: {
+        id: true,
+        name: true,
+        birthDate: true,
+        area: { select: { name: true } },
+        position: { select: { name: true } },
+      },
+    });
+
+    // Filtrar por mês de nascimento
+    const currentMonthBirthdays: Array<{
+      id: string;
+      name: string;
+      birthDate: Date;
+      day: number;
+      area: string;
+      position: string;
+    }> = [];
+
+    const nextMonthBirthdays: Array<{
+      id: string;
+      name: string;
+      birthDate: Date;
+      day: number;
+      area: string;
+      position: string;
+    }> = [];
+
+    for (const provider of providers) {
+      if (!provider.birthDate) continue;
+
+      const birthMonth = provider.birthDate.getMonth() + 1;
+      const birthDay = provider.birthDate.getDate();
+
+      const entry = {
+        id: provider.id,
+        name: provider.name,
+        birthDate: provider.birthDate,
+        day: birthDay,
+        area: provider.area.name,
+        position: provider.position.name,
+      };
+
+      if (birthMonth === currentMonth) {
+        currentMonthBirthdays.push(entry);
+      } else if (birthMonth === nextMonth) {
+        nextMonthBirthdays.push(entry);
+      }
+    }
+
+    // Ordenar por dia do mês
+    currentMonthBirthdays.sort((a, b) => a.day - b.day);
+    nextMonthBirthdays.sort((a, b) => a.day - b.day);
+
+    return {
+      currentMonth: {
+        month: currentMonth,
+        birthdays: currentMonthBirthdays,
+      },
+      nextMonth: {
+        month: nextMonth,
+        birthdays: nextMonthBirthdays,
+      },
+    };
+  }),
+
   // Listar usuarios pendentes (para admin dashboard)
   getPendingUsers: protectedProcedure.query(async ({ ctx }) => {
     const currentUser = await prisma.user.findUnique({

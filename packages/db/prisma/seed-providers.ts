@@ -96,22 +96,22 @@ const providersData = [
 
 // Mapeamento de departamentos da API para áreas do sistema
 const departmentToArea: Record<string, string> = {
-  "Médicos": "Gestão de Médicos",
-  "Consulta": "Atendimento - Consulta Médica",
-  "Inicial": "Atendimento - Inicial",
-  "Receita": "Atendimento - Receita & Orçamento",
-  "Docs": "Atendimento - Documentação",
-  "Pós": "Atendimento - Pós Venda",
+  "Médicos": "Operações - Gestão de Médicos",
+  "Consulta": "Operações - Consulta Médica",
+  "Inicial": "Operações - Inicial",
+  "Receita": "Operações - Receita e Orçamento",
+  "Docs": "Operações - Documentação",
+  "Pós": "Operações - Pós Venda",
   "PO": "Tecnologia",
   "PM": "Tecnologia",
   "Projetos": "Tecnologia",
   "Dev": "Tecnologia",
   "Design": "Tecnologia",
-  "RH": "RH",
+  "RH": "Recursos Humanos",
   "Financeiro": "Financeiro",
   "Marketing": "Marketing",
-  "Diretoria": "Geral",
-  "Atendimento": "Atendimento - Inicial",
+  "Diretoria": "Presidência",
+  "Atendimento": "Operações - Inicial",
 };
 
 // Função para converter data DD/MM/YYYY para Date
@@ -128,15 +128,15 @@ async function main() {
   const areaMap = new Map(areas.map((a) => [a.name, a.id]));
   console.log(`📍 ${areas.length} áreas encontradas`);
 
-  // Buscar cargo Analista
+  // Buscar cargo Analista Junior (padrão para prestadores)
   const analistaPosition = await prisma.position.findUnique({
-    where: { name: "Analista" },
+    where: { name: "Analista Junior" },
   });
 
   if (!analistaPosition) {
-    throw new Error("Cargo 'Analista' não encontrado. Execute o seed principal primeiro.");
+    throw new Error("Cargo 'Analista Junior' não encontrado. Execute o seed principal primeiro.");
   }
-  console.log(`👤 Cargo padrão: ${analistaPosition.name} (nível ${analistaPosition.level})`);
+  console.log(`👤 Cargo padrão: ${analistaPosition.name}`);
 
   // Verificar mapeamento de áreas
   console.log("\n📋 Verificando mapeamento de áreas...");
