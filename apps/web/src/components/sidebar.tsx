@@ -279,7 +279,7 @@ export default function Sidebar({ isAdmin = false }: SidebarProps) {
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         <NavSection title="Principal" items={mainNavItems} />
         <NavSection title="Solicitacoes" items={requestNavItems} showBadges />
-        <NavSection title="Folha de Pagamento" items={payrollNavItems} />
+        {isAdmin && <NavSection title="Folha de Pagamento" items={payrollNavItems} />}
         {isAdmin && <NavSection title="Administracao" items={adminNavItems} />}
       </div>
 
